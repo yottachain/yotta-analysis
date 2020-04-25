@@ -3,6 +3,7 @@ package ytanalysis
 import (
 	"context"
 
+	"github.com/ivpusic/grpool"
 	log "github.com/sirupsen/logrus"
 	"github.com/yottachain/yotta-analysis/eostx"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -16,6 +17,7 @@ type Analyser struct {
 	checker *Host
 	SnCount int64
 	Params  *MiscConfig
+	pool    *grpool.Pool
 }
 
 //New create new analyser instance
@@ -38,7 +40,6 @@ func New(mongoURL, eosURL, bpAccount, bpPrivkey, contractOwnerM, contractOwnerD,
 		return nil, err
 	}
 	log.Info("ytanalysis: New: creating host successful")
-	analyser := &Analyser{client: client, eostx: etx, checker: host, SnCount: snCount, Params: conf}
-	analyser.StartRecheck()
+	analyser := &Analyser{client: client, eostx: etx, checker: host, SnCount: snCount, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
 	return analyser, nil
 }

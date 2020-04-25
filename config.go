@@ -38,6 +38,10 @@ const (
 	//LoggerLevelField Field name of logger.level config
 	LoggerLevelField = "logger.level"
 
+	//MiscRecheckingPoolLengthField Field name of misc.reckecking-pool-length config
+	MiscRecheckingPoolLengthField = "misc.reckecking-pool-length"
+	//MiscRecheckingQueueLengthField Field name of misc.reckecking-queue-length config
+	MiscRecheckingQueueLengthField = "misc.reckecking-queue-length"
 	//MiscConnectivityTestIntervalField Field name of misc.connectivity-test-interval config
 	MiscConnectivityTestIntervalField = "misc.connectivity-test-interval"
 	//MiscAvaliableNodeTimeGapField Field name of misc.avaliable-node-time-gap config
@@ -101,6 +105,8 @@ type LogConfig struct {
 
 //MiscConfig miscellaneous configuration
 type MiscConfig struct {
+	RecheckingPoolLength      int    `mapstructure:"reckecking-pool-length"`
+	RecheckingQueueLength     int    `mapstructure:"reckecking-queue-length"`
 	ConnectivityTestInterval  int32  `mapstructure:"connectivity-test-interval"`
 	AvaliableNodeTimeGap      int64  `mapstructure:"avaliable-node-time-gap"`
 	MinerVersionThreshold     int32  `mapstructure:"miner-version-threshold"`
@@ -135,6 +141,8 @@ func InitializeConfig() *Config {
 	viper.SetDefault(LoggerRotationTimeField, 24)
 	viper.SetDefault(LoggerMaxAgeField, 2400)
 	viper.SetDefault(LoggerLevelField, "Debug")
+	viper.SetDefault(MiscRecheckingPoolLengthField, 5000)
+	viper.SetDefault(MiscRecheckingQueueLengthField, 10000)
 	viper.SetDefault(MiscConnectivityTestIntervalField, 60)
 	viper.SetDefault(MiscAvaliableNodeTimeGapField, 3)
 	viper.SetDefault(MiscMinerVersionThresholdField, 0)

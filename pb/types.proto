@@ -4,8 +4,8 @@ package pb;
 
 option optimize_for = SPEED;
 option java_multiple_files = true;
-option java_package = "io.yottachain.nodemgmt.pb";
-option java_outer_classname = "NodeMgmtProto";
+option java_package = "io.yottachain.nodemgmt.analysis.pb";
+option java_outer_classname = "AnalysisProto";
 
 // yotta-analysis micro-servicew
 service Analysis {
@@ -149,7 +149,7 @@ message DNIReq {
 // request message of UpdateTaskStatus function
 message UpdateTaskStatusReq {
   string id = 1;
-  repeated int32 invalidNodeList = 2;
+  int32 invalidNode = 2;
 }
 
 // ShardCount message

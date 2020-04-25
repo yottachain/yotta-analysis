@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/eoscanada/eos-go"
 	proto "github.com/golang/protobuf/proto"
-	"github.com/ivpusic/grpool"
 	log "github.com/sirupsen/logrus"
 	pbh "github.com/yottachain/P2PHost/pb"
 	pb "github.com/yottachain/yotta-analysis/pb"
@@ -26,213 +26,217 @@ func init() {
 
 //StartRecheck starting recheck process
 func (analyser *Analyser) StartRecheck() {
-	log.Infof("ytanalysis: StartRecheck: starting recheck executor...\n")
-	log.Infof("ytanalysis: StartRecheck: clear spotcheck tasks...\n")
-	collection := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	_, err := collection.DeleteMany(context.Background(), bson.M{"status": 0})
+	log.Infof("ytanalysis: StartRecheck: starting deprecated task reaper...\n")
+	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	_, err := collectionS.UpdateMany(context.Background(), bson.M{"status": 1}, bson.M{"$set": bson.M{"status": 0}})
 	if err != nil {
-		log.Warnf("ytanalysis: StartRecheck: deleting spotcheck tasks with status 0: %s\n", err.Error())
+		log.Warnf("ytanalysis: StartRecheck: updating spotcheck tasks with status 1 to 0: %s\n", err.Error())
 	}
-	_, err = collection.UpdateMany(context.Background(), bson.M{"status": 2}, bson.M{"$set": bson.M{"status": 1}})
-	if err != nil {
-		log.Warnf("ytanalysis: StartRecheck: updatING spotcheck tasks with status 2 to 1: %s\n", err.Error())
-	}
-	go analyser.doRecheck()
+	go func() {
+		for {
+			time.Sleep(time.Duration(1) * time.Hour)
+			now := time.Now().Unix()
+			_, err := collectionS.DeleteMany(context.Background(), bson.M{"timestamp": bson.M{"$lt": now - 3600*24}})
+			if err != nil {
+				log.Warnf("ytanalysis: StartRecheck: deleting spotcheck tasks with status 0: %s\n", err.Error())
+			}
+		}
+	}()
 }
 
 func (analyser *Analyser) selectNodeTab(minerID int32) *mongo.Collection {
 	return analyser.client.Database(DBName(analyser.SnCount, minerID)).Collection(NodeTab)
 }
 
-func (analyser *Analyser) doRecheck() {
-	pool := grpool.NewPool(5000, 10000)
-	defer pool.Release()
-	collection := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionErr := analyser.client.Database(AnalysisDB).Collection(ErrorNodeTab)
-	for {
-		cur, err := collection.Find(context.Background(), bson.M{"status": 1})
-		if err != nil {
-			log.Warnf("ytanalysis: doRecheck: selecting recheckable task: %s\n", err.Error())
-			time.Sleep(time.Second * time.Duration(10))
-			continue
-		}
-		for cur.Next(context.Background()) {
-			var flag = true
-			spr := new(SpotCheckRecord)
-			err := cur.Decode(spr)
-			if err != nil {
-				log.Warnf("ytanalysis: doRecheck: decoding recheckable task: %s\n", err.Error())
-				continue
-			}
-			n := new(Node)
-			err = analyser.selectNodeTab(spr.NID).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(n)
-			if err != nil {
-				log.Warnf("ytanalysis: doRecheck: decoding node: %s\n", err.Error())
-				_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-				if err != nil {
-					log.Warnf("ytanalysis: doRecheck: deleting task related a non-exist node: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-				}
-				continue
-			}
-			if n.Status > 1 {
-				_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-				if err != nil {
-					log.Warnf("ytanalysis: doRecheck: deleting task with node status bigger than 1: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-				}
-				continue
-			}
+// func (analyser *Analyser) doRecheck() {
+// 	pool := grpool.NewPool(5000, 10000)
+// 	defer pool.Release()
+// 	collection := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+// 	collectionErr := analyser.client.Database(AnalysisDB).Collection(ErrorNodeTab)
+// 	for {
+// 		cur, err := collection.Find(context.Background(), bson.M{"status": 1})
+// 		if err != nil {
+// 			log.Warnf("ytanalysis: doRecheck: selecting recheckable task: %s\n", err.Error())
+// 			time.Sleep(time.Second * time.Duration(10))
+// 			continue
+// 		}
+// 		for cur.Next(context.Background()) {
+// 			var flag = true
+// 			spr := new(SpotCheckRecord)
+// 			err := cur.Decode(spr)
+// 			if err != nil {
+// 				log.Warnf("ytanalysis: doRecheck: decoding recheckable task: %s\n", err.Error())
+// 				continue
+// 			}
+// 			n := new(Node)
+// 			err = analyser.selectNodeTab(spr.NID).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(n)
+// 			if err != nil {
+// 				log.Warnf("ytanalysis: doRecheck: decoding node: %s\n", err.Error())
+// 				_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 				if err != nil {
+// 					log.Warnf("ytanalysis: doRecheck: deleting task related a non-exist node: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 				}
+// 				continue
+// 			}
+// 			if n.Status > 1 {
+// 				_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 				if err != nil {
+// 					log.Warnf("ytanalysis: doRecheck: deleting task with node status bigger than 1: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 				}
+// 				continue
+// 			}
 
-			t := time.Now().Unix() - spr.Timestamp
-			for i := range [10080]byte{} {
-				if t > analyser.Params.PunishGapUnit*int64(i+1) && spr.ErrCount == int64(i) {
-					_, err = collection.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"errCount": i + 1}})
-					if err != nil {
-						log.Errorf("ytanalysis: doRecheck: updating error count: %s\n", err.Error())
-						break
-					}
-					spr.ErrCount = int64(i + 1)
-					// if i+1 == int(rebuildPhase) {
-					// 	_, err = collectionNode.UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-					// 	if err != nil {
-					// 		log.Printf("spotcheck: doRecheck: error when updating rebuild status: %s\n", err.Error())
-					// 	}
-					// 	err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
-					// 	if err != nil {
-					// 		log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
-					// 	}
-					// 	flag = false
-					// }
+// 			t := time.Now().Unix() - spr.Timestamp
+// 			for i := range [10080]byte{} {
+// 				if t > analyser.Params.PunishGapUnit*int64(i+1) && spr.ErrCount == int64(i) {
+// 					_, err = collection.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"errCount": i + 1}})
+// 					if err != nil {
+// 						log.Errorf("ytanalysis: doRecheck: updating error count: %s\n", err.Error())
+// 						break
+// 					}
+// 					spr.ErrCount = int64(i + 1)
+// 					// if i+1 == int(rebuildPhase) {
+// 					// 	_, err = collectionNode.UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
+// 					// 	if err != nil {
+// 					// 		log.Printf("spotcheck: doRecheck: error when updating rebuild status: %s\n", err.Error())
+// 					// 	}
+// 					// 	err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
+// 					// 	if err != nil {
+// 					// 		log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
+// 					// 	}
+// 					// 	flag = false
+// 					// }
 
-					if i+1 == int(analyser.Params.PunishPhase1) {
-						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase1 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
-						if analyser.Params.PunishPhase1Percent > 0 {
-							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
-								left, err := analyser.punish(n, int64(analyser.Params.PunishPhase1Percent))
-								if err != nil {
-									log.Errorf("ytanalysis: doRecheck: punishing %d%%: %s\n", analyser.Params.PunishPhase1Percent, err.Error())
-								} else if flag && left == 0 {
-									log.Infof("ytanalysis: doRecheck: no deposit can be punished: %d\n", n.ID)
-									spr.Status = 3
-									_, err := collectionErr.InsertOne(context.Background(), spr)
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: inserting deposit exhausted task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-										break
-									}
-									_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: deleting deposit exhausted task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-										collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-										break
-									}
-									//TODO: how to modify node
-									_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: updating rebuild status: %s\n", err.Error())
-									}
-									// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
-									// if err != nil {
-									// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
-									// }
-									flag = false
-								}
-							}
-						}
-						break
-					}
-					if i+1 == int(analyser.Params.PunishPhase2) {
-						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase2 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
-						if analyser.Params.PunishPhase2Percent > 0 {
-							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
-								left, err := analyser.punish(n, int64(analyser.Params.PunishPhase2Percent))
-								if err != nil {
-									log.Errorf("ytanalysis: doRecheck: error when punishing %d%%: %s\n", analyser.Params.PunishPhase2Percent, err.Error())
-								} else if flag && left == 0 {
-									log.Infof("spotcheck: doRecheck: no deposit can be punished: %d\n", n.ID)
-									spr.Status = 3
-									_, err := collectionErr.InsertOne(context.Background(), spr)
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: inserting deposit exhausted task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-										break
-									}
-									_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: deleting deposit exhausted task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-										collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-										break
-									}
-									//TODO: how to modify node
-									_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-									if err != nil {
-										log.Errorf("ytanalysis: doRecheck: updating exhausted Node %d: %s\n", n.ID, err.Error())
-									}
-									// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
-									// if err != nil {
-									// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
-									// }
-									flag = false
-								}
-							}
-						}
-						break
-					}
-					if i+1 == int(analyser.Params.PunishPhase3) {
-						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase3 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
-						spr.Status = 1
-						_, err := collectionErr.InsertOne(context.Background(), spr)
-						if err != nil {
-							log.Errorf("ytanalysis: doRecheck: inserting timeout task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-							break
-						}
-						_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-						if err != nil {
-							log.Errorf("ytanalysis: doRecheck: deleting timeout task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-							collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-							break
-						}
-						//TODO: how to modify node
-						_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-						if err != nil {
-							log.Errorf("ytanalysis: doRecheck: updating rebuild status: %s\n", err.Error())
-						}
-						// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
-						// if err != nil {
-						// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
-						// }
-						if analyser.Params.PunishPhase3Percent > 0 {
-							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
-								_, err = analyser.punish(n, int64(analyser.Params.PunishPhase3Percent))
-								if err != nil {
-									log.Errorf("ytanalysis: doRecheck: doing phase3 punishment: %s\n", err.Error())
-								}
-							}
-						}
-						flag = false
-					}
-				}
-			}
+// 					if i+1 == int(analyser.Params.PunishPhase1) {
+// 						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase1 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
+// 						if analyser.Params.PunishPhase1Percent > 0 {
+// 							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
+// 								left, err := analyser.punish(n, int64(analyser.Params.PunishPhase1Percent))
+// 								if err != nil {
+// 									log.Errorf("ytanalysis: doRecheck: punishing %d%%: %s\n", analyser.Params.PunishPhase1Percent, err.Error())
+// 								} else if flag && left == 0 {
+// 									log.Infof("ytanalysis: doRecheck: no deposit can be punished: %d\n", n.ID)
+// 									spr.Status = 3
+// 									_, err := collectionErr.InsertOne(context.Background(), spr)
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: inserting deposit exhausted task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 										break
+// 									}
+// 									_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: deleting deposit exhausted task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 										collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 										break
+// 									}
+// 									//TODO: how to modify node
+// 									_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: updating rebuild status: %s\n", err.Error())
+// 									}
+// 									// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
+// 									// if err != nil {
+// 									// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
+// 									// }
+// 									flag = false
+// 								}
+// 							}
+// 						}
+// 						break
+// 					}
+// 					if i+1 == int(analyser.Params.PunishPhase2) {
+// 						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase2 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
+// 						if analyser.Params.PunishPhase2Percent > 0 {
+// 							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
+// 								left, err := analyser.punish(n, int64(analyser.Params.PunishPhase2Percent))
+// 								if err != nil {
+// 									log.Errorf("ytanalysis: doRecheck: error when punishing %d%%: %s\n", analyser.Params.PunishPhase2Percent, err.Error())
+// 								} else if flag && left == 0 {
+// 									log.Infof("spotcheck: doRecheck: no deposit can be punished: %d\n", n.ID)
+// 									spr.Status = 3
+// 									_, err := collectionErr.InsertOne(context.Background(), spr)
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: inserting deposit exhausted task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 										break
+// 									}
+// 									_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: deleting deposit exhausted task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 										collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 										break
+// 									}
+// 									//TODO: how to modify node
+// 									_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
+// 									if err != nil {
+// 										log.Errorf("ytanalysis: doRecheck: updating exhausted Node %d: %s\n", n.ID, err.Error())
+// 									}
+// 									// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
+// 									// if err != nil {
+// 									// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
+// 									// }
+// 									flag = false
+// 								}
+// 							}
+// 						}
+// 						break
+// 					}
+// 					if i+1 == int(analyser.Params.PunishPhase3) {
+// 						log.Infof("ytanalysis: doRecheck: miner %d has been offline for %d seconds, do phase3 punishment\n", spr.NID, analyser.Params.PunishGapUnit*int64(i+1))
+// 						spr.Status = 1
+// 						_, err := collectionErr.InsertOne(context.Background(), spr)
+// 						if err != nil {
+// 							log.Errorf("ytanalysis: doRecheck: inserting timeout task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 							break
+// 						}
+// 						_, err = collection.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 						if err != nil {
+// 							log.Errorf("ytanalysis: doRecheck: deleting timeout task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
+// 							collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+// 							break
+// 						}
+// 						//TODO: how to modify node
+// 						_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
+// 						if err != nil {
+// 							log.Errorf("ytanalysis: doRecheck: updating rebuild status: %s\n", err.Error())
+// 						}
+// 						// err = self.eostx.CalculateProfit(n.Owner, uint64(n.ID), false)
+// 						// if err != nil {
+// 						// 	log.Printf("spotcheck: doRecheck: error when stopping profit calculation: %s\n", err.Error())
+// 						// }
+// 						if analyser.Params.PunishPhase3Percent > 0 {
+// 							if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
+// 								_, err = analyser.punish(n, int64(analyser.Params.PunishPhase3Percent))
+// 								if err != nil {
+// 									log.Errorf("ytanalysis: doRecheck: doing phase3 punishment: %s\n", err.Error())
+// 								}
+// 							}
+// 						}
+// 						flag = false
+// 					}
+// 				}
+// 			}
 
-			if flag {
-				//calculate probability for rechecking
-				r := rand.Int63n(10 * int64(analyser.Params.SpotCheckInterval))
-				if r < 10 {
-					// rechecking
-					_, err = collection.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
-					if err != nil {
-						log.Errorf("ytanalysis: doRecheck: updating recheckable task to status 2: %s\n", err.Error())
-						cur.Close(context.Background())
-						continue
-					}
-					spr.Status = 2
-					pool.JobQueue <- func() {
-						analyser.checkDataNode(spr)
-					}
-				}
-			}
-		}
-		cur.Close(context.Background())
-		time.Sleep(time.Second * time.Duration(10))
-	}
-}
+// 			if flag {
+// 				//calculate probability for rechecking
+// 				r := rand.Int63n(10 * int64(analyser.Params.SpotCheckInterval))
+// 				if r < 10 {
+// 					// rechecking
+// 					_, err = collection.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+// 					if err != nil {
+// 						log.Errorf("ytanalysis: doRecheck: updating recheckable task to status 2: %s\n", err.Error())
+// 						cur.Close(context.Background())
+// 						continue
+// 					}
+// 					spr.Status = 2
+// 					pool.JobQueue <- func() {
+// 						analyser.checkDataNode(spr)
+// 					}
+// 				}
+// 			}
+// 		}
+// 		cur.Close(context.Background())
+// 		time.Sleep(time.Second * time.Duration(10))
+// 	}
+// }
 
 func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 	collection := analyser.client.Database(DBName(analyser.SnCount, minerID)).Collection(PoolWeightTab)
@@ -255,146 +259,184 @@ func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 
 func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 	log.Infof("ytanalysis: checkDataNode: SN rechecking task: %d -> %s -> %s\n", spr.NID, spr.TaskID, spr.VNI)
-	//collection := self.client.Database(YottaDB).Collection(NodeTab)
-	collectionSpotCheck := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionErr := analyser.client.Database(AnalysisDB).Collection(ErrorNodeTab)
-	n := new(Node)
-	err := analyser.selectNodeTab(spr.NID).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(n)
+	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	node := new(Node)
+	err := analyser.selectNodeTab(spr.NID).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
 	if err != nil {
 		log.Errorf("ytanalysis: checkDataNode: decoding node which performing rechecking: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-		_, err = collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
-		if err != nil {
-			log.Errorf("ytanalysis: checkDataNode: updating task %s status to 1: %s\n", spr.TaskID, err.Error())
-		}
+		defer func() {
+			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+			if err != nil {
+				log.Errorf("ytanalysis: checkDataNode: updating task %s status to 0: %s\n", spr.TaskID, err.Error())
+			}
+		}()
 		return
 	}
-	if n.Status > 1 {
-		_, err := collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
-		if err != nil {
-			log.Errorf("ytanalysis: checkDataNode: updating task %s status to 1 whose node status is bigger than 1: %s\n", spr.TaskID, err.Error())
-		}
-		return
-	}
-	b, err := analyser.CheckVNI(n, spr)
+	scNode := new(Node)
+	opts := new(options.FindOneAndUpdateOptions)
+	opts = opts.SetReturnDocument(options.After)
+	b, err := analyser.CheckVNI(node, spr)
 	if err != nil {
 		log.Warnf("ytanalysis: checkDataNode: vni check error: %d -> %s -> %s: %s\n", spr.NID, spr.TaskID, spr.VNI, err.Error())
-		_, err := collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
+		err = collectionSN.FindOneAndUpdate(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
 		if err != nil {
-			log.Errorf("ytanalysis: checkDataNode: updating task %s status to 1: %s\n", spr.TaskID, err.Error())
+			log.Errorf("ytanalysis: checkDataNode: increasing error count of miner %d: %s\n", spr.NID, err.Error())
+			defer func() {
+				_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+				if err != nil {
+					log.Errorf("ytanalysis: checkDataNode: updating task %s status to 0: %s\n", spr.TaskID, err.Error())
+				}
+			}()
+			return
 		}
+		defer func() {
+			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+			if err != nil {
+				log.Errorf("ytanalysis: checkDataNode: updating task %s status to 2: %s\n", spr.TaskID, err.Error())
+			}
+		}()
 	} else {
 		if b {
-			_, err := collectionSpotCheck.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
+			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
 			if err != nil {
-				log.Errorf("ytanalysis: checkDataNode: deleting task %s: %s\n", spr.TaskID, err.Error())
+				log.Errorf("ytanalysis: checkDataNode: update status of task %s to 0: %s\n", spr.TaskID, err.Error())
 			} else {
-				log.Infof("spotcheck: checkDataNode: vni check success: %d -> %s -> %s\n", spr.NID, spr.TaskID, spr.VNI)
+				log.Infof("ytanalysis: checkDataNode: vni check success: %d -> %s -> %s\n", spr.NID, spr.TaskID, spr.VNI)
 			}
-		} else {
-			errstr := ""
+			return
+		}
+		errstr := ""
+		if err != nil {
+			errstr = err.Error()
+		}
+		log.Infof("ytanalysis: checkDataNode: vni check failed, checking 100 more VNIs: %d -> %s -> %s: %s\n", spr.NID, spr.TaskID, spr.VNI, errstr)
+		i := 0
+		var errCount int64 = 0
+		flag := true
+		for range [100]byte{} {
+			i++
+			spr.VNI, err = analyser.getRandomVNI(node.ID)
 			if err != nil {
-				errstr = err.Error()
-			}
-			log.Infof("ytanalysis: checkDataNode: vni check failed, checking 100 more VNIs: %d -> %s -> %s: %s\n", spr.NID, spr.TaskID, spr.VNI, errstr)
-			i := 0
-			var errCount int64 = 0
-			for range [100]byte{} {
-				i++
-				spr.VNI, err = analyser.GetRandomVNI(n.ID)
-				if err != nil {
-					log.Errorf("ytanalysis: checkDataNode: get random vni%d error: %d -> %s -> %s: %s\n", i, spr.NID, spr.TaskID, spr.VNI, err.Error())
-					_, err := collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
+				log.Errorf("ytanalysis: checkDataNode: get random vni%d error: %d -> %s -> %s: %s\n", i, spr.NID, spr.TaskID, spr.VNI, err.Error())
+				defer func() {
+					_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
 					if err != nil {
-						log.Errorf("ytanalysis: checkDataNode: error happens when update task %s status to 1: %s\n", spr.TaskID, err.Error())
+						log.Errorf("ytanalysis: checkDataNode: error happens when update task %s status to 0: %s\n", spr.TaskID, err.Error())
 					}
-					return
-				}
-				b, err := analyser.CheckVNI(n, spr)
-				if err != nil {
-					log.Warnf("ytanalysis: checkDataNode: vni%d check error: %d -> %s -> %s: %s\n", i, spr.NID, spr.TaskID, spr.VNI, err.Error())
-					_, err := collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
-					if err != nil {
-						log.Errorf("ytanalysis: checkDataNode: updating task %s status to 1: %s\n", spr.TaskID, err.Error())
-					}
-					return
-				}
-				if !b {
-					errCount++
-				}
-			}
-			spr.ErrCount = errCount
-			spr.Status = 2
-			log.Infof("ytanalysis: checkDataNode: finished 100 VNIs check, %d verify errors in %d checks\n", errCount, i)
-			if errCount == 100 {
-				_, err := collectionErr.InsertOne(context.Background(), spr)
-				if err != nil {
-					log.Errorf("ytanalysis: checkDataNode: inserting verified error task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-					return
-				}
-			}
-			_, err = collectionSpotCheck.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-			if err != nil {
-				log.Errorf("ytanalysis: checkDataNode: deleting verify error task: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-				_, err := collectionErr.DeleteOne(context.Background(), bson.M{"_id": spr.TaskID})
-				if err != nil {
-					log.Errorf("ytanalysis: checkDataNode: deleting spotcheck task %s: %s\n", spr.TaskID, err.Error())
-				}
-				_, err = collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 1}})
-				if err != nil {
-					log.Errorf("ytanalysis: checkDataNode: update spotcheck task %s status to 1: %s\n", spr.TaskID, err.Error())
-				}
+				}()
 				return
 			}
+			b, err := analyser.CheckVNI(node, spr)
+			if err != nil {
+				flag = false
+				log.Warnf("ytanalysis: checkDataNode: vni%d check error: %d -> %s -> %s: %s\n", i, spr.NID, spr.TaskID, spr.VNI, err.Error())
+				err = collectionSN.FindOneAndUpdate(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
+				if err != nil {
+					log.Errorf("ytanalysis: checkDataNode: increasing error count of miner %d: %s\n", spr.NID, err.Error())
+					defer func() {
+						_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+						if err != nil {
+							log.Errorf("ytanalysis: checkDataNode: error happens when update task %s status to 0: %s\n", spr.TaskID, err.Error())
+						}
+					}()
+					return
+				}
+				break
+			}
+			if !b {
+				errCount++
+			}
+		}
+		defer func() {
+			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+			if err != nil {
+				log.Errorf("ytanalysis: checkDataNode: updating task %s status to 2: %s\n", spr.TaskID, err.Error())
+			}
+		}()
+		if flag {
+			log.Infof("ytanalysis: checkDataNode: finished 100 VNIs check, %d verify errors in %d checks\n", errCount, i)
 			if errCount == 100 {
 				log.Warnf("ytanalysis: checkDataNode: 100/100 random VNI checking of miner %d has failed, punish %d%% deposit\n", spr.NID, analyser.Params.PunishPhase3Percent)
 				if analyser.Params.PunishPhase3Percent > 0 {
-					if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
-						_, err := analyser.punish(n, int64(analyser.Params.PunishPhase3Percent))
+					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
+						_, err := analyser.punish(node, int64(analyser.Params.PunishPhase3Percent))
 						if err != nil {
-							log.Errorf("ytanalysis: checkDataNode: punishing node %d 50%% deposit: %s\n", spr.NID, err.Error())
+							log.Errorf("ytanalysis: checkDataNode: punishing 50%% deposit of node %d: %s\n", spr.NID, err.Error())
 						}
+						defer func() {
+							_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"status": 2}})
+							if err != nil {
+								log.Errorf("ytanalysis: checkDataNode: updating status of spotcheck node %d to 2: %s\n", spr.NID, err.Error())
+							}
+						}()
 					}
-				}
-				// err = self.eostx.CalculateProfit(n.ProfitAcc, uint64(n.ID), false)
-				// if err != nil {
-				// 	log.Printf("spotcheck: checkDataNode: error when stopping profit calculation: %s\n", err.Error())
-				// }
-				//TODO: how to modify node
-				_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-				if err != nil {
-					log.Errorf("ytanalysis: checkDataNode: updating rebuild status: %s\n", err.Error())
 				}
 			} else {
 				log.Infof("ytanalysis: checkDataNode: %d/100 random VNI checking of miner %d has failed, punish %d%% deposit\n", errCount, spr.NID, analyser.Params.PunishPhase1Percent)
 				if analyser.Params.PunishPhase1Percent > 0 {
-					if analyser.ifNeedPunish(spr.NID, n.PoolOwner) {
-						left, err := analyser.punish(n, int64(analyser.Params.PunishPhase1Percent))
+					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
+						left, err := analyser.punish(node, int64(analyser.Params.PunishPhase1Percent))
 						if err != nil {
-							log.Errorf("ytanalysis: checkDataNode: punishing node %d 1%% deposit: %s\n", spr.NID, err.Error())
+							log.Errorf("ytanalysis: checkDataNode: punishing 1%% deposit of node %d: %s\n", spr.NID, err.Error())
 						} else if left == 0 {
 							log.Warnf("ytanalysis: checkDataNode: no deposit can be punished: %d\n", spr.NID)
-							spr.Status = 3
-							_, err := collectionErr.InsertOne(context.Background(), spr)
-							if err != nil {
-								log.Errorf("ytanalysis: checkDataNode: inserting deposit exhausted task to error node collection: %d -> %s -> %s\n", spr.NID, spr.TaskID, err.Error())
-								return
-							}
-							// err = self.eostx.CalculateProfit(n.ProfitAcc, uint64(n.ID), false)
-							// if err != nil {
-							// 	log.Printf("spotcheck: checkDataNode: error when stopping profit calculation: %s\n", err.Error())
-							// }
-							//TODO: how to modify node
-							_, err = analyser.selectNodeTab(spr.NID).UpdateOne(context.Background(), bson.M{"_id": n.ID}, bson.M{"$set": bson.M{"status": 2, "tasktimestamp": int64(0)}})
-							if err != nil {
-								log.Errorf("ytanalysis: checkDataNode: updating rebuild status: %s\n", err.Error())
-							}
-							_, err = collectionSpotCheck.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 3}})
-							if err != nil {
-								log.Errorf("ytanalysis: checkDataNode: updating error node status to %d: %s\n", 3, err.Error())
-							}
+						} else {
+							log.Infof("ytanalysis: checkDataNode: do phase 1 punishment to miner %d\n", spr.NID)
 						}
 					}
 				}
+			}
+			return
+		}
+	}
+
+	if scNode.ErrorCount == analyser.Params.PunishPhase1 {
+		log.Infof("ytanalysis: checkDataNode: miner %d has been offline for %d times in spotchecking, do phase 1 punishment\n", spr.NID, scNode.ErrorCount)
+		if analyser.Params.PunishPhase1Percent > 0 {
+			if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
+				left, err := analyser.punish(node, int64(analyser.Params.PunishPhase1Percent))
+				if err != nil {
+					log.Errorf("ytanalysis: checkDataNode: punishing %d%% of miner %d: %s\n", analyser.Params.PunishPhase1Percent, spr.NID, err.Error())
+				} else if left == 0 {
+					log.Warnf("ytanalysis: checkDataNode: no deposit can be punished: %d\n", scNode.ID)
+				} else {
+					log.Infof("ytanalysis: checkDataNode: do phase 1 punishment to miner %d\n", scNode.ID)
+				}
+			}
+		}
+	} else if scNode.ErrorCount == analyser.Params.PunishPhase2 {
+		log.Infof("ytanalysis: checkDataNode: miner %d has been offline for %d times in spotchecking, do phase 2 punishment\n", spr.NID, scNode.ErrorCount)
+		if analyser.Params.PunishPhase2Percent > 0 {
+			if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
+				left, err := analyser.punish(node, int64(analyser.Params.PunishPhase2Percent))
+				if err != nil {
+					log.Errorf("ytanalysis: checkDataNode: punishing %d%% of miner %d: %s\n", analyser.Params.PunishPhase2Percent, spr.NID, err.Error())
+				} else if left == 0 {
+					log.Warnf("ytanalysis: checkDataNode: no deposit can be punished: %d\n", scNode.ID)
+				} else {
+					log.Infof("ytanalysis: checkDataNode: do phase 2 punishment to miner %d\n", scNode.ID)
+				}
+			}
+		}
+	} else if scNode.ErrorCount == analyser.Params.PunishPhase3 {
+		log.Infof("ytanalysis: checkDataNode: miner %d has been offline for %d times in spotchecking, do phase 3 punishment\n", spr.NID, scNode.ErrorCount)
+		if analyser.Params.PunishPhase3Percent > 0 {
+			if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
+				left, err := analyser.punish(node, int64(analyser.Params.PunishPhase3Percent))
+				if err != nil {
+					log.Errorf("ytanalysis: checkDataNode: punishing %d%% of miner %d: %s\n", analyser.Params.PunishPhase3Percent, spr.NID, err.Error())
+				} else if left == 0 {
+					log.Warnf("ytanalysis: checkDataNode: no deposit can be punished: %d\n", scNode.ID)
+				} else {
+					log.Infof("ytanalysis: checkDataNode: do phase 3 punishment to miner %d\n", scNode.ID)
+				}
+				defer func() {
+					_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"status": 2}})
+					if err != nil {
+						log.Errorf("ytanalysis: checkDataNode: updating status of spotcheck node %d to 2: %s\n", spr.NID, err.Error())
+					}
+				}()
 			}
 		}
 	}
@@ -448,6 +490,9 @@ func (analyser *Analyser) punish(node *Node, percent int64) (int64, error) {
 	totalAsset := pledgeData.Total
 	leftAsset := pledgeData.Deposit
 	punishAsset := pledgeData.Deposit
+	if leftAsset.Amount == 0 {
+		return 0, nil
+	}
 
 	var retLeft int64 = 0
 	punishFee := int64(totalAsset.Amount) * percent / 100
@@ -464,38 +509,74 @@ func (analyser *Analyser) punish(node *Node, percent int64) (int64, error) {
 }
 
 //UpdateTaskStatus process error task of spotchecking
-func (analyser *Analyser) UpdateTaskStatus(taskid string, invalidNodeList []int32) error {
-	collection := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	for _, id := range invalidNodeList {
-		spr := new(SpotCheckRecord)
-		err := collection.FindOne(context.Background(), bson.M{"_id": taskid}).Decode(spr)
+func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) error {
+	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	//check if lastest spotcheck task of miner invalidNode is task with taskID
+	lastestSpotCheck := new(SpotCheckRecord)
+	opt := new(options.FindOptions)
+	var limit int64 = 1
+	opt.Sort = bson.M{"timestamp": -1}
+	opt.Limit = &limit
+	cur, err := collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	if err != nil {
+		log.Errorf("ytanalysis: UpdateTaskStatus: fetching lastest spotcheck task: %s\n", err.Error())
+		return err
+	}
+	defer cur.Close(context.Background())
+	if cur.Next(context.Background()) {
+		err := cur.Decode(lastestSpotCheck)
 		if err != nil {
-			log.Errorf("ytanalysis: UpdateTaskStatus: fetching spotcheck task in mongodb: %d -> %s -> %s\n", id, taskid, err.Error())
-			continue
+			log.Errorf("ytanalysis: UpdateTaskStatus: decoding lastest spotcheck task: %s\n", err.Error())
+			return err
 		}
-		if spr.Status > 0 {
-			log.Warnf("ytanalysis: UpdateTaskStatus: task is already under rechecking: %d -> %s -> %s\n", id, taskid, err.Error())
-			continue
+		if lastestSpotCheck.TaskID != taskID {
+			log.Warn("ytanalysis: UpdateTaskStatus: reported task is not lastest spotcheck task")
+			return nil
 		}
-		sping := new(SpotCheckRecord)
-		err = collection.FindOne(context.Background(), bson.M{"nid": id, "status": bson.M{"$gt": 0}}).Decode(sping)
+	}
+	//check if status of last spotcheck is 0, then update error count of miner invalidNode to 0
+	lastSpotCheck := new(SpotCheckRecord)
+	opt = new(options.FindOptions)
+	var skip int64 = 1
+	opt.Sort = bson.M{"timestamp": -1}
+	opt.Limit = &limit
+	opt.Skip = &skip
+	cur, err = collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	if err != nil {
+		log.Errorf("ytanalysis: UpdateTaskStatus: fetching last spotcheck task: %s\n", err.Error())
+		return err
+	}
+	defer cur.Close(context.Background())
+	if cur.Next(context.Background()) {
+		err := cur.Decode(lastSpotCheck)
 		if err != nil {
-			log.Errorf("ytanalysis: UpdateTaskStatus: update task %s status to 1: %s\n", taskid, err.Error())
-			_, err := collection.UpdateOne(context.Background(), bson.M{"_id": taskid}, bson.M{"$set": bson.M{"status": 1, "timestamp": time.Now().Unix()}})
+			log.Errorf("ytanalysis: UpdateTaskStatus: decoding last spotcheck task: %s\n", err.Error())
+			return err
+		}
+		if lastSpotCheck.Status == 0 {
+			_, err = collectionSN.UpdateOne(context.Background(), bson.M{"_id": invalidNode}, bson.M{"$set": bson.M{"errorCount": 0}})
 			if err != nil {
-				log.Errorf("ytanalysis: UpdateTaskStatus: updating task %s status to 1: %s\n", spr.TaskID, err.Error())
+				log.Errorf("ytanalysis: UpdateTaskStatus: update error count of miner %d to 0: %s\n", invalidNode, err.Error())
+				return err
 			}
 		}
-		_, err = collection.DeleteMany(context.Background(), bson.M{"nid": id, "status": 0})
-		if err != nil {
-			log.Errorf("ytanalysis: UpdateTaskStatus: deleting tasks with node ID %d: %s\n", id, err.Error())
-		}
+	}
+	//update task status to 1(rechecking)
+	_, err = collectionS.UpdateOne(context.Background(), bson.M{"_id": taskID}, bson.M{"$set": bson.M{"status": 1}})
+	if err != nil {
+		log.Errorf("ytanalysis: UpdateTaskStatus: update status of spotcheck task %s to 1: %s\n", taskID, err.Error())
+		return err
+	}
+	//rechecking
+	analyser.pool.JobQueue <- func() {
+		analyser.checkDataNode(lastestSpotCheck)
 	}
 	return nil
 }
 
-//GetRandomVNI find one VNI by miner ID and index of DNI table
-func (analyser *Analyser) GetRandomVNI(id int32) (string, error) {
+//getRandomVNI find one VNI by miner ID and index of DNI table
+func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	collection := analyser.client.Database(DBName(analyser.SnCount, id)).Collection(DNITab)
 	startTime := analyser.Params.SpotCheckSkipTime
 	var limit int64 = 1
@@ -560,18 +641,23 @@ func (analyser *Analyser) GetRandomVNI(id int32) (string, error) {
 
 //GetSpotCheckList creates a spotcheck task
 func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
-	spotCheckList := new(SpotCheckList)
-	snID := rand.Int31n(int32(analyser.SnCount))
-	collection := analyser.client.Database(DBName(analyser.SnCount, snID)).Collection(NodeTab)
-	collectionSpotCheck := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	for range [10]byte{} {
-		total, err := collection.CountDocuments(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
+		spotCheckList := new(SpotCheckList)
+		now := time.Now().Unix()
+		snID := rand.Int31n(int32(analyser.SnCount))
+		collectionN := analyser.client.Database(DBName(analyser.SnCount, snID)).Collection(NodeTab)
+		//select spotchecked miner
+		node := new(Node)
+		total, err := collectionN.CountDocuments(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
 		if err != nil {
 			log.Errorf("ytanalysis: GetSpotCheckList: calculating total count of spotcheckable nodes: %s\n", err.Error())
 			continue
 		}
 		if total == 0 {
-			break
+			log.Warn("ytanalysis: GetSpotCheckList: total count of spotcheckable nodes is zero\n")
+			continue
 		}
 		n := rand.Intn(int(total))
 		optionf := new(options.FindOptions)
@@ -579,71 +665,90 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		limit := int64(1)
 		optionf.Limit = &limit
 		optionf.Skip = &skip
-		cur, err := collection.Find(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
+		cur, err := collectionN.Find(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
 		if err != nil {
 			log.Errorf("ytanalysis: GetSpotCheckList: fetching spotcheckable node: %s\n", err.Error())
 			continue
 		}
 		if cur.Next(context.Background()) {
-			node := new(Node)
 			err := cur.Decode(node)
 			if err != nil {
-				log.Errorf("ytanalysis: GetSpotCheckList: decoding spotcheck task: %s\n", err.Error())
+				log.Errorf("ytanalysis: GetSpotCheckList: decoding spotchecked node: %s\n", err.Error())
 				cur.Close(context.Background())
 				continue
 			}
 			log.Infof("ytanalysis: GetSpotCheckList: node %d wil be spotchecked\n", node.ID)
-			spotCheckTask := new(SpotCheckTask)
-			spotCheckTask.ID = node.ID
-			spotCheckTask.NodeID = node.NodeID
-			addr := GetRelayURL(node.Addrs)
-			if addr != "" {
-				spotCheckTask.Addr = addr
-			} else {
-				spotCheckTask.Addr = analyser.CheckPublicAddr(node.Addrs)
-			}
-			spotCheckTask.VNI, err = analyser.GetRandomVNI(node.ID)
+		}
+		cur.Close(context.Background())
+		//check spotcheck node
+		scNode := new(Node)
+		err = collectionSN.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(scNode)
+		if err == nil && scNode.Status == 2 {
+			log.Warnf("miner %d is under rebuilding\n", scNode.ID)
+			continue
+		}
+		//check last spotcheck
+		lastSpotCheck := new(SpotCheckRecord)
+		optionf = new(options.FindOptions)
+		optionf.Sort = bson.M{"timestamp": -1}
+		optionf.Limit = &limit
+		cur, err = collectionS.Find(context.Background(), bson.M{"nid": node.ID}, optionf)
+		if err != nil {
+			log.Errorf("ytanalysis: GetSpotCheckList: fetching last spotcheck task: %s\n", err.Error())
+			continue
+		}
+		if cur.Next(context.Background()) {
+			err := cur.Decode(lastSpotCheck)
 			if err != nil {
-				log.Errorf("ytanalysis: GetSpotCheckList: selecting random vni: %d %s\n", node.ID, err.Error())
+				log.Errorf("ytanalysis: GetSpotCheckList: decoding last spotcheck task: %s\n", err.Error())
 				cur.Close(context.Background())
 				continue
 			}
-			log.Infof("ytanalysis: GetSpotCheckList: select random VNI for node %d -> %s\n", node.ID, spotCheckTask.VNI)
-			spotCheckList.TaskID = primitive.NewObjectID()
-			spotCheckList.Timestamp = time.Now().Unix()
-			spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
-			cur.Close(context.Background())
-
-			sping := new(SpotCheckRecord)
-			err = collectionSpotCheck.FindOne(context.Background(), bson.M{"nid": spotCheckTask.ID, "status": bson.M{"$gt": 0}}).Decode(sping)
-			if err == nil {
-				log.Warnf("ytanalysis: GetSpotCheckList: node %d is already under rechecking: %s\n", spotCheckTask.ID, sping.TaskID)
-				_, err = collectionSpotCheck.DeleteMany(context.Background(), bson.M{"nid": spotCheckTask.ID, "status": 0})
-				if err != nil {
-					log.Errorf("ytanalysis: GetSpotCheckList: deleting spotcheck task when another task with same node is under rechecking: %d %s\n", node.ID, err.Error())
-				}
-				return nil, fmt.Errorf("a spotcheck task with node id %d is under rechecking: %s", spotCheckTask.ID, spotCheckList.TaskID)
-			}
-
-			spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp}
-			_, err = collectionSpotCheck.InsertOne(context.Background(), spr)
-			if err != nil {
-				log.Errorf("ytanalysis: GetSpotCheckList: getting spotcheck vni: %d %s\n", node.ID, err.Error())
+			if (now-lastSpotCheck.Timestamp < analyser.Params.SpotCheckInterval/2) || lastSpotCheck.Status == 1 {
+				log.Warnf("ytanalysis: GetSpotCheckList: conflict with last spotcheck task\n")
+				cur.Close(context.Background())
 				continue
 			}
-
-			//delete expired task
-			_, err = collectionSpotCheck.DeleteMany(context.Background(), bson.M{"nid": spotCheckTask.ID, "status": 0, "timestamp": bson.M{"$lt": time.Now().Unix() - 3600*24}})
-			if err != nil {
-				log.Errorf("ytanalysis: GetSpotCheckList: error when deleting timeout spotcheck task of node: %d %s\n", node.ID, err.Error())
-			}
-
-			return spotCheckList, nil
 		}
 		cur.Close(context.Background())
-		continue
+		//select random shardspotCheckTask := new(SpotCheckTask)
+		spotCheckTask := new(SpotCheckTask)
+		spotCheckTask.ID = node.ID
+		spotCheckTask.NodeID = node.NodeID
+		addr := GetRelayURL(node.Addrs)
+		if addr != "" {
+			spotCheckTask.Addr = addr
+		} else {
+			spotCheckTask.Addr = analyser.CheckPublicAddr(node.Addrs)
+		}
+		spotCheckTask.VNI, err = analyser.getRandomVNI(node.ID)
+		if err != nil {
+			log.Errorf("ytanalysis: GetSpotCheckList: selecting random vni of miner %d: %s\n", node.ID, err.Error())
+			continue
+		}
+		log.Infof("ytanalysis: GetSpotCheckList: select random VNI for miner %d -> %s\n", node.ID, spotCheckTask.VNI)
+		spotCheckList.TaskID = primitive.NewObjectID()
+		spotCheckList.Timestamp = now
+		spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
+
+		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp}
+		_, err = collectionS.InsertOne(context.Background(), spr)
+		if err != nil {
+			log.Errorf("ytanalysis: GetSpotCheckList: inserting spotcheck record of miner %d: %s\n", node.ID, err.Error())
+			continue
+		}
+		node.ErrorCount = 0
+		_, err = collectionSN.InsertOne(context.Background(), node)
+		if err != nil {
+			errstr := err.Error()
+			if !strings.ContainsAny(errstr, "duplicate key error") {
+				log.Errorf("ytanalysis: GetSpotCheckList: inserting miner %d to SpotCheckNode table: %s\n", node.ID, err.Error())
+				continue
+			}
+		}
+		return spotCheckList, nil
 	}
-	log.Infof("ytanalysis: GetSpotCheckList: no nodes can be spotchecked\n")
+	log.Warnf("ytanalysis: GetSpotCheckList: no nodes can be spotchecked\n")
 	return nil, errors.New("no nodes can be spotchecked")
 }
 

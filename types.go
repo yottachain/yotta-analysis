@@ -59,6 +59,8 @@ type Node struct {
 	Tx int64 `bson:"tx"`
 	//Rx
 	Rx int64 `bson:"rx"`
+	//ErrorCount
+	ErrorCount int32 `bson:"errorCount"`
 }
 
 //NewNode create a node struct
@@ -118,7 +120,7 @@ type SpotCheckRecord struct {
 	VNI       string `bson:"vni"`
 	Status    int32  `bson:"status"` // 0 - send to client, 1 - receive invalid node, 2 - rechecking
 	Timestamp int64  `bson:"timestamp"`
-	ErrCount  int64  `bson:"errCount"`
+	//ErrCount  int64  `bson:"errCount"`
 }
 
 //DNI dni struct
@@ -150,16 +152,16 @@ type PoolWeight struct {
 
 //relative DB and collection name
 var (
-	YottaDB       = "yotta"
-	NodeTab       = "Node"
-	SuperNodeTab  = "SuperNode"
-	DNITab        = "Shards"
-	SequenceTab   = "Sequence"
-	PoolWeightTab = "PoolWeight"
-	SpaceSumTab   = "SpaceSum"
-	AnalysisDB    = "analysis"
-	SpotCheckTab  = "SpotCheck"
-	ErrorNodeTab  = "ErrorNode"
+	YottaDB          = "yotta"
+	NodeTab          = "Node"
+	SuperNodeTab     = "SuperNode"
+	DNITab           = "Shards"
+	SequenceTab      = "Sequence"
+	PoolWeightTab    = "PoolWeight"
+	SpaceSumTab      = "SpaceSum"
+	AnalysisDB       = "analysis"
+	SpotCheckTab     = "SpotCheck"
+	SpotCheckNodeTab = "SpotCheckNode"
 )
 
 //index type of node and supernode collection
