@@ -59,7 +59,7 @@ var rootCmd = &cobra.Command{
 		server := &ytanalysis.Server{Analyser: analyser, Timeout: config.Timeout}
 		pb.RegisterAnalysisServer(grpcServer, server)
 		grpcServer.Serve(lis)
-		log.Info("GRPC server started\n")
+		log.Info("GRPC server started")
 	},
 }
 

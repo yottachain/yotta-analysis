@@ -17,10 +17,10 @@ logger:
 misc:
   reckecking-pool-length: 5000
   reckecking-queue-length: 10000
-  connectivity-test-interval: 60
+  # connectivity-test-interval: 60
   avaliable-node-time-gap: 3
   miner-version-threshold: 0
-  punish-gap-unit: 60
+  # punish-gap-unit: 60
   punish-phase1: 1440
   punish-phase1-percent: 1
   punish-phase2: 4320

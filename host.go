@@ -50,7 +50,7 @@ func (host *Host) testNetworkN(nodeID string, addrs []string, retries int) error
 		return nil
 	}
 	if retries == 0 {
-		log.Warnf("connectivity: testNetwork: connect %s failed\n", nodeID)
+		log.Warnf("connectivity: testNetwork: connect %s failed", nodeID)
 		return err
 	}
 	return host.testNetworkN(nodeID, addrs, retries-1)

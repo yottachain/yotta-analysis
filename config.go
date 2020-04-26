@@ -43,13 +43,13 @@ const (
 	//MiscRecheckingQueueLengthField Field name of misc.reckecking-queue-length config
 	MiscRecheckingQueueLengthField = "misc.reckecking-queue-length"
 	//MiscConnectivityTestIntervalField Field name of misc.connectivity-test-interval config
-	MiscConnectivityTestIntervalField = "misc.connectivity-test-interval"
+	//MiscConnectivityTestIntervalField = "misc.connectivity-test-interval"
 	//MiscAvaliableNodeTimeGapField Field name of misc.avaliable-node-time-gap config
 	MiscAvaliableNodeTimeGapField = "misc.avaliable-node-time-gap"
 	//MiscMinerVersionThresholdField Field name of misc.miner-version-threshold config
 	MiscMinerVersionThresholdField = "misc.miner-version-threshold"
 	//MiscPunishGapUnitField Field name of misc.punish-gap-unit config
-	MiscPunishGapUnitField = "misc.punish-gap-unit"
+	//MiscPunishGapUnitField = "misc.punish-gap-unit"
 	//MiscPunishPhase1Field Field name of misc.punish-phase1 config
 	MiscPunishPhase1Field = "misc.punish-phase1"
 	//MiscPunishPhase1PercentField Field name of misc.punish-phase1-percent config
@@ -105,12 +105,12 @@ type LogConfig struct {
 
 //MiscConfig miscellaneous configuration
 type MiscConfig struct {
-	RecheckingPoolLength      int    `mapstructure:"reckecking-pool-length"`
-	RecheckingQueueLength     int    `mapstructure:"reckecking-queue-length"`
-	ConnectivityTestInterval  int32  `mapstructure:"connectivity-test-interval"`
-	AvaliableNodeTimeGap      int64  `mapstructure:"avaliable-node-time-gap"`
-	MinerVersionThreshold     int32  `mapstructure:"miner-version-threshold"`
-	PunishGapUnit             int64  `mapstructure:"punish-gap-unit"`
+	RecheckingPoolLength  int `mapstructure:"reckecking-pool-length"`
+	RecheckingQueueLength int `mapstructure:"reckecking-queue-length"`
+	//ConnectivityTestInterval  int32  `mapstructure:"connectivity-test-interval"`
+	AvaliableNodeTimeGap  int64 `mapstructure:"avaliable-node-time-gap"`
+	MinerVersionThreshold int32 `mapstructure:"miner-version-threshold"`
+	//PunishGapUnit             int64  `mapstructure:"punish-gap-unit"`
 	PunishPhase1              int32  `mapstructure:"punish-phase1"`
 	PunishPhase1Percent       int32  `mapstructure:"punish-phase1-percent"`
 	PunishPhase2              int32  `mapstructure:"punish-phase2"`
@@ -143,10 +143,10 @@ func InitializeConfig() *Config {
 	viper.SetDefault(LoggerLevelField, "Debug")
 	viper.SetDefault(MiscRecheckingPoolLengthField, 5000)
 	viper.SetDefault(MiscRecheckingQueueLengthField, 10000)
-	viper.SetDefault(MiscConnectivityTestIntervalField, 60)
+	//viper.SetDefault(MiscConnectivityTestIntervalField, 60)
 	viper.SetDefault(MiscAvaliableNodeTimeGapField, 3)
 	viper.SetDefault(MiscMinerVersionThresholdField, 0)
-	viper.SetDefault(MiscPunishGapUnitField, 60)
+	//viper.SetDefault(MiscPunishGapUnitField, 60)
 	viper.SetDefault(MiscPunishPhase1Field, 1440)
 	viper.SetDefault(MiscPunishPhase2Field, 4320)
 	viper.SetDefault(MiscPunishPhase3Field, 10080)
