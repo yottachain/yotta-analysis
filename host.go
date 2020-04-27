@@ -28,10 +28,10 @@ func NewHost() (*Host, error) {
 }
 
 //SendMsg send a message to client
-func (host *Host) SendMsg(id string, msg []byte) ([]byte, error) {
+func (host *Host) SendMsg(ctx context.Context, id string, msg []byte) ([]byte, error) {
 	sendMsgReq := &pb.SendMsgReq{Id: id, Msgid: msg[0:2], Msg: msg[2:]}
-	ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(1000))
-	defer cancle()
+	// ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(1000))
+	// defer cancle()
 	sendMsgResp, err := host.lhost.SendMsg(ctx, sendMsgReq)
 	if err != nil {
 		return nil, err

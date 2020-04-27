@@ -9,8 +9,6 @@ import (
 const (
 	//BindAddrField Field name of bind-addr config
 	BindAddrField = "bind-addr"
-	//TimeoutField Field name of timeout config
-	TimeoutField = "timeout"
 	//MongoDBURLField Field name of mongodb-url config
 	MongoDBURLField = "mongodb-url"
 	//SNCountField Field name of sn-count config
@@ -42,14 +40,10 @@ const (
 	MiscRecheckingPoolLengthField = "misc.reckecking-pool-length"
 	//MiscRecheckingQueueLengthField Field name of misc.reckecking-queue-length config
 	MiscRecheckingQueueLengthField = "misc.reckecking-queue-length"
-	//MiscConnectivityTestIntervalField Field name of misc.connectivity-test-interval config
-	//MiscConnectivityTestIntervalField = "misc.connectivity-test-interval"
 	//MiscAvaliableNodeTimeGapField Field name of misc.avaliable-node-time-gap config
 	MiscAvaliableNodeTimeGapField = "misc.avaliable-node-time-gap"
 	//MiscMinerVersionThresholdField Field name of misc.miner-version-threshold config
 	MiscMinerVersionThresholdField = "misc.miner-version-threshold"
-	//MiscPunishGapUnitField Field name of misc.punish-gap-unit config
-	//MiscPunishGapUnitField = "misc.punish-gap-unit"
 	//MiscPunishPhase1Field Field name of misc.punish-phase1 config
 	MiscPunishPhase1Field = "misc.punish-phase1"
 	//MiscPunishPhase1PercentField Field name of misc.punish-phase1-percent config
@@ -77,7 +71,6 @@ const (
 //Config system configuration
 type Config struct {
 	BindAddr   string      `mapstructure:"bind-addr"`
-	Timeout    int64       `mapstructure:"timeout"`
 	MongoDBURL string      `mapstructure:"mongodb-url"`
 	SNCount    int64       `mapstructure:"sn-count"`
 	EOS        *EOSConfig  `mapstructure:"eos"`
@@ -105,12 +98,10 @@ type LogConfig struct {
 
 //MiscConfig miscellaneous configuration
 type MiscConfig struct {
-	RecheckingPoolLength  int `mapstructure:"reckecking-pool-length"`
-	RecheckingQueueLength int `mapstructure:"reckecking-queue-length"`
-	//ConnectivityTestInterval  int32  `mapstructure:"connectivity-test-interval"`
-	AvaliableNodeTimeGap  int64 `mapstructure:"avaliable-node-time-gap"`
-	MinerVersionThreshold int32 `mapstructure:"miner-version-threshold"`
-	//PunishGapUnit             int64  `mapstructure:"punish-gap-unit"`
+	RecheckingPoolLength      int    `mapstructure:"reckecking-pool-length"`
+	RecheckingQueueLength     int    `mapstructure:"reckecking-queue-length"`
+	AvaliableNodeTimeGap      int64  `mapstructure:"avaliable-node-time-gap"`
+	MinerVersionThreshold     int32  `mapstructure:"miner-version-threshold"`
 	PunishPhase1              int32  `mapstructure:"punish-phase1"`
 	PunishPhase1Percent       int32  `mapstructure:"punish-phase1-percent"`
 	PunishPhase2              int32  `mapstructure:"punish-phase2"`
@@ -128,28 +119,25 @@ type MiscConfig struct {
 func InitializeConfig() *Config {
 	config := new(Config)
 	viper.SetDefault(BindAddrField, ":8080")
-	viper.SetDefault(TimeoutField, 6000)
 	viper.SetDefault(MongoDBURLField, "mongodb://127.0.0.1:27017/?connect=direct")
-	viper.SetDefault(SNCountField, 5)
+	viper.SetDefault(SNCountField, 21)
 	viper.SetDefault(EOSURLField, "http://127.0.0.1:8888")
-	viper.SetDefault(EOSBPAccountField, "testaccount1")
-	viper.SetDefault(EOSBPPrivateKeyField, "00000000000")
-	viper.SetDefault(EOSContractOwnerMField, "testaccount1")
-	viper.SetDefault(EOSContractOwnerDField, "testaccount1")
-	viper.SetDefault(EOSShadowAccountField, "testaccount1")
+	viper.SetDefault(EOSBPAccountField, "")
+	viper.SetDefault(EOSBPPrivateKeyField, "")
+	viper.SetDefault(EOSContractOwnerMField, "")
+	viper.SetDefault(EOSContractOwnerDField, "")
+	viper.SetDefault(EOSShadowAccountField, "")
 	viper.SetDefault(LoggerFilePathField, "./spotcheck.log")
 	viper.SetDefault(LoggerRotationTimeField, 24)
-	viper.SetDefault(LoggerMaxAgeField, 2400)
-	viper.SetDefault(LoggerLevelField, "Debug")
+	viper.SetDefault(LoggerMaxAgeField, 240)
+	viper.SetDefault(LoggerLevelField, "Info")
 	viper.SetDefault(MiscRecheckingPoolLengthField, 5000)
 	viper.SetDefault(MiscRecheckingQueueLengthField, 10000)
-	//viper.SetDefault(MiscConnectivityTestIntervalField, 60)
 	viper.SetDefault(MiscAvaliableNodeTimeGapField, 3)
 	viper.SetDefault(MiscMinerVersionThresholdField, 0)
-	//viper.SetDefault(MiscPunishGapUnitField, 60)
-	viper.SetDefault(MiscPunishPhase1Field, 1440)
-	viper.SetDefault(MiscPunishPhase2Field, 4320)
-	viper.SetDefault(MiscPunishPhase3Field, 10080)
+	viper.SetDefault(MiscPunishPhase1Field, 4)
+	viper.SetDefault(MiscPunishPhase2Field, 24)
+	viper.SetDefault(MiscPunishPhase3Field, 168)
 	viper.SetDefault(MiscPunishPhase1PercentField, 1)
 	viper.SetDefault(MiscPunishPhase2PercentField, 10)
 	viper.SetDefault(MiscPunishPhase3PercentField, 50)

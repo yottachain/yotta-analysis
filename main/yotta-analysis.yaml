@@ -1,5 +1,4 @@
 bind-addr: ":8080"
-timeout: 6000
 mongodb-url: "mongodb://127.0.0.1:27017/?connect=direct"
 sn-count: 5
 eos:
@@ -13,23 +12,20 @@ logger:
   file-path: "./spotcheck.log"
   rotation-time: 24
   max-age: 240
-  level: "Debug"
+  level: "Info"
 misc:
   reckecking-pool-length: 5000
   reckecking-queue-length: 10000
-  # connectivity-test-interval: 60
   avaliable-node-time-gap: 3
   miner-version-threshold: 0
-  # punish-gap-unit: 60
   punish-phase1: 1440
   punish-phase1-percent: 1
   punish-phase2: 4320
   punish-phase2-percent: 10
   punish-phase3: 10080
-  punish-phase1-percent: 50
+  punish-phase3-percent: 50
   spotcheck-skip-time: 0
   spotcheck-interval: 60
   spotcheck-connect-timeout: 30
-  spotcheck-connect-timeout: 10
   error-node-percent-threshold: 95
   exclude-addr-prefix: ""

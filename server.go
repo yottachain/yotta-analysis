@@ -11,7 +11,6 @@ import (
 // Server implemented server API for Analysis service.
 type Server struct {
 	Analyser *Analyser
-	Timeout  int64
 }
 
 // GetSpotCheckList implemented GetSpotCheckList function of AnalysisServer

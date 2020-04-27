@@ -56,7 +56,7 @@ var rootCmd = &cobra.Command{
 		}
 		log.Printf("GRPC address: %s\n", config.BindAddr)
 		grpcServer := grpc.NewServer()
-		server := &ytanalysis.Server{Analyser: analyser, Timeout: config.Timeout}
+		server := &ytanalysis.Server{Analyser: analyser}
 		pb.RegisterAnalysisServer(grpcServer, server)
 		grpcServer.Serve(lis)
 		log.Info("GRPC server started")
@@ -111,7 +111,7 @@ func init() {
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.
