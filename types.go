@@ -5,6 +5,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+const (
+	Function  = "function"
+	TaskID    = "taskID"
+	MinerID   = "minerID"
+	ShardHash = "vni"
+	PoolOwner = "poolOwner"
+)
+
 // Node instance
 type Node struct {
 	//data node index

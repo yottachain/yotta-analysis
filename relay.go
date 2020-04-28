@@ -22,16 +22,6 @@ func GetRelayURL(addrs []string) string {
 	return ""
 }
 
-//ConnectivityCheck check connectivity of miner
-func (analyser *Analyser) ConnectivityCheck(nodeID string, addrs []string) bool {
-	err := analyser.checker.TestNetwork(nodeID, addrs)
-	if err != nil {
-		return false
-	}
-	//log.Printf("### cancel connectivity check")
-	return true
-}
-
 //CheckPublicAddr check if public address exists
 func (analyser *Analyser) CheckPublicAddr(addrs []string) string {
 	for _, addr := range addrs {

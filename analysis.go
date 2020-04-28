@@ -22,24 +22,25 @@ type Analyser struct {
 
 //New create new analyser instance
 func New(mongoURL, eosURL, bpAccount, bpPrivkey, contractOwnerM, contractOwnerD, shadowAccount string, snCount int64, conf *MiscConfig) (*Analyser, error) {
+	entry := log.WithFields(log.Fields{Function: "New"})
 	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURL))
 	if err != nil {
-		log.Errorf("ytanalysis: New: creating mongodb client failed: %s %s", mongoURL, err.Error())
+		entry.WithError(err).Errorf("creating mongoDB client failed: %s", mongoURL)
 		return nil, err
 	}
-	log.Infof("ytanalysis: New: create mongodb client: %s", mongoURL)
+	entry.Infof("created mongoDB client: %s", mongoURL)
 	etx, err := eostx.NewInstance(eosURL, bpAccount, bpPrivkey, contractOwnerM, contractOwnerD, shadowAccount)
 	if err != nil {
-		log.Errorf("ytanalysis: New: creating eos client failed: %s %s", eosURL, err.Error())
+		entry.WithError(err).Errorf("creating EOS client failed: %s", eosURL)
 		return nil, err
 	}
-	log.Infof("ytanalysis: New: create eos client: %s", eosURL)
+	entry.Infof("created EOS client: %s", eosURL)
 	host, err := NewHost()
 	if err != nil {
-		log.Errorf("ytanalysis: New: creating new host failed: %s", err.Error())
+		entry.WithError(err).Error("creating new host failed")
 		return nil, err
 	}
-	log.Info("ytanalysis: New: creating host successful")
+	entry.Info("creating host successful")
 	analyser := &Analyser{client: client, eostx: etx, checker: host, SnCount: snCount, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
 	return analyser, nil
 }

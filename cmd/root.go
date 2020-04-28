@@ -54,7 +54,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("failed to listen address %s: %s\n", config.BindAddr, err)
 		}
-		log.Printf("GRPC address: %s\n", config.BindAddr)
+		log.Infof("GRPC address: %s", config.BindAddr)
 		grpcServer := grpc.NewServer()
 		server := &ytanalysis.Server{Analyser: analyser}
 		pb.RegisterAnalysisServer(grpcServer, server)
