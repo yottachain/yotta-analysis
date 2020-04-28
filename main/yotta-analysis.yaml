@@ -1,5 +1,12 @@
 bind-addr: ":8080"
-mongodb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+mongodb-urls:
+- "mongodb://127.0.0.1:27017/?connect=direct"
+- "mongodb://127.0.0.1:27017/?connect=direct"
+- "mongodb://127.0.0.1:27017/?connect=direct"
+- "mongodb://127.0.0.1:27017/?connect=direct"
+- "mongodb://127.0.0.1:27017/?connect=direct"
+dbname-indexed: false
 sn-count: 5
 eos:
   url: "http://127.0.0.1:8888"

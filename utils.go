@@ -2,19 +2,12 @@ package ytanalysis
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 
 	cyp "github.com/libp2p/go-libp2p-core/crypto"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	"github.com/mr-tron/base58"
 )
-
-//DBName create DB name by miner ID
-func DBName(snCount int64, minerID int32) string {
-	snID := minerID % int32(snCount)
-	return fmt.Sprintf("%s%d", YottaDB, snID)
-}
 
 // EqualSorted check if two arrays are equal
 func EqualSorted(listA, listB interface{}) (ok bool) {

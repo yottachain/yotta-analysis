@@ -9,8 +9,12 @@ import (
 const (
 	//BindAddrField Field name of bind-addr config
 	BindAddrField = "bind-addr"
-	//MongoDBURLField Field name of mongodb-url config
-	MongoDBURLField = "mongodb-url"
+	//AnalysisDBURLField Field name of analysisdb-url config
+	AnalysisDBURLField = "analysisdb-url"
+	//MongoDBURLSField Field name of mongodb-urls config
+	MongoDBURLSField = "mongodb-urls"
+	//DBNameIndexedField Field name of dbname-indexed config
+	DBNameIndexedField = "dbname-indexed"
 	//SNCountField Field name of sn-count config
 	SNCountField = "sn-count"
 
@@ -70,12 +74,14 @@ const (
 
 //Config system configuration
 type Config struct {
-	BindAddr   string      `mapstructure:"bind-addr"`
-	MongoDBURL string      `mapstructure:"mongodb-url"`
-	SNCount    int64       `mapstructure:"sn-count"`
-	EOS        *EOSConfig  `mapstructure:"eos"`
-	Logger     *LogConfig  `mapstructure:"logger"`
-	MiscConfig *MiscConfig `mapstructure:"misc"`
+	BindAddr      string      `mapstructure:"bind-addr"`
+	AnalysisDBURL string      `mapstructure:"analysisdb-url"`
+	MongoDBURLs   []string    `mapstructure:"mongodb-urls"`
+	DBNameIndexed bool        `mapstructure:"dbname-indexed"`
+	SNCount       int64       `mapstructure:"sn-count"`
+	EOS           *EOSConfig  `mapstructure:"eos"`
+	Logger        *LogConfig  `mapstructure:"logger"`
+	MiscConfig    *MiscConfig `mapstructure:"misc"`
 }
 
 //EOSConfig EOS configuration
@@ -119,7 +125,9 @@ type MiscConfig struct {
 func InitializeConfig() *Config {
 	config := new(Config)
 	viper.SetDefault(BindAddrField, ":8080")
-	viper.SetDefault(MongoDBURLField, "mongodb://127.0.0.1:27017/?connect=direct")
+	viper.SetDefault(AnalysisDBURLField, "mongodb://127.0.0.1:27017/?connect=direct")
+	viper.SetDefault(MongoDBURLSField, []string{"mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct"})
+	viper.SetDefault(DBNameIndexedField, false)
 	viper.SetDefault(SNCountField, 21)
 	viper.SetDefault(EOSURLField, "http://127.0.0.1:8888")
 	viper.SetDefault(EOSBPAccountField, "")
