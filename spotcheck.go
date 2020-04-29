@@ -17,7 +17,6 @@ import (
 	pb "github.com/yottachain/yotta-analysis/pb"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -29,7 +28,7 @@ func init() {
 func (analyser *Analyser) StartRecheck() {
 	entry := log.WithFields(log.Fields{Function: "StartRecheck"})
 	entry.Info("starting deprecated task reaper...")
-	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	_, err := collectionS.UpdateMany(context.Background(), bson.M{"status": 1}, bson.M{"$set": bson.M{"status": 0}})
 	if err != nil {
 		entry.WithError(err).Error("updating spotcheck tasks with status 1 to 0")
@@ -50,13 +49,9 @@ func (analyser *Analyser) StartRecheck() {
 	}()
 }
 
-func (analyser *Analyser) selectNodeTab(minerID int32) *mongo.Collection {
-	return analyser.client.Database(DBName(analyser.SnCount, minerID)).Collection(NodeTab)
-}
-
 func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 	entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
-	collection := analyser.client.Database(DBName(analyser.SnCount, minerID)).Collection(PoolWeightTab)
+	collection := analyser.SelectYottaDB(minerID).Collection(PoolWeightTab)
 	result := new(PoolWeight)
 	err := collection.FindOne(context.Background(), bson.M{"_id": poolOwner}).Decode(result)
 	if err != nil {
@@ -79,10 +74,10 @@ func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 	entry := log.WithFields(log.Fields{Function: "checkDataNode", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
 	entry.Info("task is under rechecking")
-	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	node := new(Node)
-	err := analyser.selectNodeTab(spr.NID).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
+	err := analyser.SelectYottaDB(spr.NID).Collection(NodeTab).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
 	if err != nil {
 		entry.WithError(err).Error("decoding miner info which performing rechecking")
 		defer func() {
@@ -376,8 +371,8 @@ func (analyser *Analyser) punish(node *Node, percent int64) (int64, error) {
 //UpdateTaskStatus process error task of spotchecking
 func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) error {
 	entry := log.WithFields(log.Fields{Function: "UpdateTaskStatus", TaskID: taskID, MinerID: invalidNode})
-	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	//check if lastest spotcheck task of miner invalidNode is task with taskID
 	lastestSpotCheck := new(SpotCheckRecord)
 	opt := new(options.FindOptions)
@@ -452,7 +447,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 //getRandomVNI find one VNI by miner ID and index of DNI table
 func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	entry := log.WithFields(log.Fields{Function: "getRandomVNI", MinerID: id})
-	collection := analyser.client.Database(DBName(analyser.SnCount, id)).Collection(DNITab)
+	collection := analyser.SelectYottaDB(id).Collection(DNITab)
 	startTime := analyser.Params.SpotCheckSkipTime
 	var limit int64 = 1
 	opt := options.FindOptions{}
@@ -532,26 +527,26 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 //GetSpotCheckList creates a spotcheck task
 func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 	entry := log.WithFields(log.Fields{Function: "GetSpotCheckList"})
-	collectionS := analyser.client.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionSN := analyser.client.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
+	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	for range [10]byte{} {
 		spotCheckList := new(SpotCheckList)
 		now := time.Now().Unix()
 		snID := rand.Int31n(int32(analyser.SnCount))
 		entry.Debugf("selected SN %d", snID)
-		collectionN := analyser.client.Database(DBName(analyser.SnCount, snID)).Collection(NodeTab)
+		collectionN := analyser.SelectYottaDB(snID).Collection(NodeTab)
 		//select spotchecked miner
 		node := new(Node)
 		total, err := collectionN.CountDocuments(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
 		if err != nil {
-			entry.WithError(err).Error("calculating total count of spotcheckable miners")
+			entry.WithError(err).Errorf("calculating total count of spotcheckable miners in SN %d", snID)
 			continue
 		}
 		if total == 0 {
-			entry.Warn("total count of spotcheckable miners is 0")
+			entry.Warnf("total count of spotcheckable miners in SN %d is 0", snID)
 			continue
 		}
-		entry.Debugf("total count of spotcheckable miners is %d", total)
+		entry.Debugf("total count of spotcheckable miners in SN %d is %d", snID, total)
 		n := rand.Intn(int(total))
 		optionf := new(options.FindOptions)
 		skip := int64(n)
@@ -560,17 +555,17 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		optionf.Skip = &skip
 		cur, err := collectionN.Find(context.Background(), bson.M{"_id": bson.M{"$mod": bson.A{analyser.SnCount, snID}}, "usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
 		if err != nil {
-			entry.WithError(err).Error("finding random miner for spotcheck")
+			entry.WithError(err).Errorf("finding random miner for spotcheck in SN %d", snID)
 			continue
 		}
 		if cur.Next(context.Background()) {
 			err := cur.Decode(node)
 			if err != nil {
-				entry.WithError(err).Error("decoding spotcheck miner")
+				entry.WithError(err).Errorf("decoding spotcheck miner in SN %d", snID)
 				cur.Close(context.Background())
 				continue
 			}
-			entry.Infof("miner %d is to be spotchecked", node.ID)
+			entry.Infof("miner %d is to be spotchecked in SN %d", node.ID, snID)
 		}
 		cur.Close(context.Background())
 		//check spotcheck node
@@ -587,19 +582,19 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		optionf.Limit = &limit
 		cur, err = collectionS.Find(context.Background(), bson.M{"nid": node.ID}, optionf)
 		if err != nil {
-			entry.WithError(err).Error("fetching lastest spotcheck task")
+			entry.WithError(err).Errorf("fetching lastest spotcheck task of miner %d", node.ID)
 			continue
 		}
 		if cur.Next(context.Background()) {
 			err := cur.Decode(lastSpotCheck)
 			if err != nil {
-				entry.WithError(err).Error("decoding lastest spotcheck task")
+				entry.WithError(err).Errorf("decoding lastest spotcheck task of miner %d", node.ID)
 				cur.Close(context.Background())
 				continue
 			}
-			entry.Debugf("found lastest spotcheck task: %s", lastSpotCheck.TaskID)
+			entry.Debugf("found lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
 			if (now-lastSpotCheck.Timestamp < analyser.Params.SpotCheckInterval*60/2) || lastSpotCheck.Status == 1 {
-				entry.Warnf("conflict with lastest spotcheck task")
+				entry.Warnf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
 				cur.Close(context.Background())
 				continue
 			}
@@ -616,13 +611,13 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		} else {
 			spotCheckTask.Addr = analyser.CheckPublicAddr(node.Addrs)
 		}
-		entry.Debugf("select random VNI for current spotcheck task: miner %d", node.ID)
+		entry.Debugf("selecting random VNI of miner %d", node.ID)
 		spotCheckTask.VNI, err = analyser.getRandomVNI(node.ID)
 		if err != nil {
-			entry.WithError(err).Errorf("selecting random vni of miner %d", node.ID)
+			entry.WithError(err).Errorf("selecting random VNI of miner %d", node.ID)
 			continue
 		}
-		entry.Infof("selected random VNI for miner %d: %s", node.ID, spotCheckTask.VNI)
+		entry.Infof("selected random VNI of miner %d: %s", node.ID, spotCheckTask.VNI)
 		spotCheckList.TaskID = primitive.NewObjectID()
 		spotCheckList.Timestamp = now
 		spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
@@ -651,7 +646,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 //IsNodeSelected check if node is selected for spotchecking
 func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	entry := log.WithFields(log.Fields{Function: "IsNodeSelected"})
-	collection := analyser.client.Database(DBName(analyser.SnCount, 0)).Collection(NodeTab)
+	collection := analyser.SelectYottaDB(0).Collection(NodeTab)
 	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
 	if err != nil {
 		entry.WithError(err).Error("calculating count of spotcheckable miners")

@@ -44,8 +44,11 @@ var rootCmd = &cobra.Command{
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		config := ytanalysis.InitializeConfig()
+		if len(config.MongoDBURLs) != int(config.SNCount) {
+			panic("count of mongoDB URL is not equal to SN count\n")
+		}
 		initLog(config)
-		analyser, err := ytanalysis.New(config.MongoDBURL, config.EOS.URL, config.EOS.BPAccount, config.EOS.BPPrivateKey, config.EOS.ContractOwnerM, config.EOS.ContractOwnerD, config.EOS.ShadowAccount, config.SNCount, config.MiscConfig)
+		analyser, err := ytanalysis.New(config.MongoDBURLs, config.DBNameIndexed, config.AnalysisDBURL, config.EOS.URL, config.EOS.BPAccount, config.EOS.BPPrivateKey, config.EOS.ContractOwnerM, config.EOS.ContractOwnerD, config.EOS.ShadowAccount, config.SNCount, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
