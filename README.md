@@ -97,6 +97,7 @@ analysis服务需要从各SN所属的mongoDB数据库获取数据，为减轻主
 | vni |string |	被抽查分片 |
 | status | int32 | 任务状态：0-任务已发出，1-任务复核中，2-校验完毕且有错误 |
 | timestamp	| int64	| 发出任务时的时间戳 |
+
 `SpotCheckNode`和yotta库的`Node`表字段相同，只是多了一个`errorCount`字段（类型为`int32`）用以记录抽查连续出错次数
 
 另外需要为`SpotCheck`表添加索引：
