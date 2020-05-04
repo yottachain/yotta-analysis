@@ -1,4 +1,5 @@
 /*
+Package cmd created by cobra framework
 Copyright © 2020 NAME HERE <EMAIL ADDRESS>
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +44,10 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		config := initYTConfig()
+		config := new(ytanalysis.Config)
+		if err := viper.Unmarshal(config); err != nil {
+			panic(fmt.Sprintf("unable to decode into config struct, %v\n", err))
+		}
 		if len(config.MongoDBURLs) != int(config.SNCount) {
 			panic("count of mongoDB URL is not equal to SN count\n")
 		}
@@ -69,14 +73,6 @@ var rootCmd = &cobra.Command{
 func initLog(config *ytanalysis.Config) {
 	switch strings.ToLower(config.Logger.Output) {
 	case "file":
-		/* 日志轮转相关函数
-		`WithLinkName` 为最新的日志建立软连接
-		`WithRotationTime` 设置日志分割的时间，隔多久分割一次
-		WithMaxAge 和 WithRotationCount二者只能设置一个
-		`WithMaxAge` 设置文件清理前的最长保存时间
-		`WithRotationCount` 设置文件清理前最多保存的个数
-		*/
-		// 下面配置日志每隔 1 分钟轮转一个新文件，保留最近 3 分钟的日志文件，多余的自动清理掉。
 		writer, _ := rotatelogs.New(
 			config.Logger.FilePath+".%Y%m%d",
 			rotatelogs.WithLinkName(config.Logger.FilePath),
@@ -174,8 +170,8 @@ var (
 	DefaultDBNameIndexed bool = false
 	//DefaultSNCount default value of SNCount
 	DefaultSNCount int64 = 21
-	//DefaultEOSURL default value of EOSURL
 
+	//DefaultEOSURL default value of EOSURL
 	DefaultEOSURL string = "http://127.0.0.1:8888"
 	//DefaultEOSBPAccount default value of EOSBPAccount
 	DefaultEOSBPAccount string = ""
@@ -298,43 +294,4 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.MiscErrorNodePercentThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscErrorNodePercentThresholdField))
 	rootCmd.PersistentFlags().String(ytanalysis.MiscExcludeAddrPrefixField, DefaultMiscExcludeAddrPrefix, "Miners with this value as address prefix is considered as valid")
 	viper.BindPFlag(ytanalysis.MiscExcludeAddrPrefixField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscExcludeAddrPrefixField))
-}
-
-func initYTConfig() *ytanalysis.Config {
-	config := new(ytanalysis.Config)
-	viper.SetDefault(ytanalysis.BindAddrField, DefaultBindAddr)
-	viper.SetDefault(ytanalysis.AnalysisDBURLField, DefaultAnalysisDBURL)
-	viper.SetDefault(ytanalysis.MongoDBURLSField, DefaultMongoDBURLS)
-	viper.SetDefault(ytanalysis.DBNameIndexedField, DefaultDBNameIndexed)
-	viper.SetDefault(ytanalysis.SNCountField, DefaultSNCount)
-	viper.SetDefault(ytanalysis.EOSURLField, DefaultEOSURL)
-	viper.SetDefault(ytanalysis.EOSBPAccountField, DefaultEOSBPAccount)
-	viper.SetDefault(ytanalysis.EOSBPPrivateKeyField, DefaultEOSBPPrivateKey)
-	viper.SetDefault(ytanalysis.EOSContractOwnerMField, DefaultEOSContractOwnerM)
-	viper.SetDefault(ytanalysis.EOSContractOwnerDField, DefaultEOSContractOwnerD)
-	viper.SetDefault(ytanalysis.EOSShadowAccountField, DefaultEOSShadowAccount)
-	viper.SetDefault(ytanalysis.LoggerOutputField, DefaultLoggerOutput)
-	viper.SetDefault(ytanalysis.LoggerFilePathField, DefaultLoggerFilePath)
-	viper.SetDefault(ytanalysis.LoggerRotationTimeField, DefaultLoggerRotationTime)
-	viper.SetDefault(ytanalysis.LoggerMaxAgeField, DefaultLoggerMaxAge)
-	viper.SetDefault(ytanalysis.LoggerLevelField, DefaultLoggerLevel)
-	viper.SetDefault(ytanalysis.MiscRecheckingPoolLengthField, DefaultMiscRecheckingPoolLength)
-	viper.SetDefault(ytanalysis.MiscRecheckingQueueLengthField, DefaultMiscRecheckingQueueLength)
-	viper.SetDefault(ytanalysis.MiscAvaliableNodeTimeGapField, DefaultMiscAvaliableNodeTimeGap)
-	viper.SetDefault(ytanalysis.MiscMinerVersionThresholdField, DefaultMiscMinerVersionThreshold)
-	viper.SetDefault(ytanalysis.MiscPunishPhase1Field, DefaultMiscPunishPhase1)
-	viper.SetDefault(ytanalysis.MiscPunishPhase2Field, DefaultMiscPunishPhase2)
-	viper.SetDefault(ytanalysis.MiscPunishPhase3Field, DefaultMiscPunishPhase3)
-	viper.SetDefault(ytanalysis.MiscPunishPhase1PercentField, DefaultMiscPunishPhase1Percent)
-	viper.SetDefault(ytanalysis.MiscPunishPhase2PercentField, DefaultMiscPunishPhase2Percent)
-	viper.SetDefault(ytanalysis.MiscPunishPhase3PercentField, DefaultMiscPunishPhase3Percent)
-	viper.SetDefault(ytanalysis.MiscSpotCheckSkipTimeField, DefaultMiscSpotCheckSkipTime)
-	viper.SetDefault(ytanalysis.MiscSpotCheckIntervalField, DefaultMiscSpotCheckInterval)
-	viper.SetDefault(ytanalysis.MiscSpotCheckConnectTimeoutField, DefaultMiscSpotCheckConnectTimeout)
-	viper.SetDefault(ytanalysis.MiscErrorNodePercentThresholdField, DefaultMiscErrorNodePercentThreshold)
-	viper.SetDefault(ytanalysis.MiscExcludeAddrPrefixField, DefaultMiscExcludeAddrPrefix)
-	if err := viper.Unmarshal(config); err != nil {
-		panic(fmt.Sprintf("unable to decode into config struct, %v\n", err))
-	}
-	return config
 }
