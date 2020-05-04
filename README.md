@@ -37,6 +37,8 @@ eos:
   shadow-account: "eosio"
 #日志相关配置
 logger:
+  #日志输入类型：stdout为输出到标准输出流，file为输出到文件，默认为stdout，此时只有level属性起作用，其他属性会被忽略
+  output: "file"
   #日志路径，默认值为./spotcheck.log
   file-path: "./spotcheck.log"
   #日志拆分间隔时间，默认为24（小时）
@@ -81,6 +83,10 @@ misc:
 启动服务：
 ```
 $ nohup ./analysis &
+```
+如果不想使用配置文件也可以通过命令行标志来设置参数，标志指定的值也可以覆盖掉配置文件中对应的属性：
+```
+$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --mongodb-urls "mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct" --dbname-indexed "true" --sn-count "5" --eos.url "http://127.0.0.1:8888" --eos.bp-account "eosio" --eos.bp-privatekey "5KXAHdRJLJQksQpu3tqKKpZmEZiWvtB7SixV1JUp9vy7bXByvHp" --eos.contract-ownerm "hddpool12345" --eos.contract-ownerd "hdddeposit12" --eos.shadow-account "eosio" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-skip-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.exclude-addr-prefix "/ip4/172.17"
 ```
 SN端目前测试版本只需要重新编译`YDTNMgmtJavaBinding`项目的`dev`分支并替换原有jar包即可
 

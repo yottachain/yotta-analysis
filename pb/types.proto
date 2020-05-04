@@ -28,7 +28,7 @@ message StringMsg {
   string value = 1;
 }
 
-// message that only contains a value of string
+// message that only contains two values of string
 message String2Msg {
   string param1 = 1;
   string param2 = 2;

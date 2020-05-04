@@ -1,11 +1,5 @@
 package ytanalysis
 
-import (
-	"fmt"
-
-	"github.com/spf13/viper"
-)
-
 const (
 	//BindAddrField Field name of bind-addr config
 	BindAddrField = "bind-addr"
@@ -31,6 +25,8 @@ const (
 	//EOSShadowAccountField Field name of eos.shadow-account config
 	EOSShadowAccountField = "eos.shadow-account"
 
+	//LoggerOutputField Field name of logger.output config
+	LoggerOutputField = "logger.output"
 	//LoggerFilePathField Field name of logger.file-path config
 	LoggerFilePathField = "logger.file-path"
 	//LoggerRotationTimeField Field name of logger.rotation-time config
@@ -96,6 +92,7 @@ type EOSConfig struct {
 
 //LogConfig system log configuration
 type LogConfig struct {
+	Output       string `mapstructure:"output"`
 	FilePath     string `mapstructure:"file-path"`
 	RotationTime int64  `mapstructure:"rotation-time"`
 	MaxAge       int64  `mapstructure:"max-age"`
@@ -119,43 +116,4 @@ type MiscConfig struct {
 	SpotCheckConnectTimeout   int64  `mapstructure:"spotcheck-connect-timeout"`
 	ErrorNodePercentThreshold int32  `mapstructure:"error-node-percent-threshold"`
 	ExcludeAddrPrefix         string `mapstructure:"exclude-addr-prefix"`
-}
-
-//InitializeConfig initialize config structure
-func InitializeConfig() *Config {
-	config := new(Config)
-	viper.SetDefault(BindAddrField, ":8080")
-	viper.SetDefault(AnalysisDBURLField, "mongodb://127.0.0.1:27017/?connect=direct")
-	viper.SetDefault(MongoDBURLSField, []string{"mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct"})
-	viper.SetDefault(DBNameIndexedField, false)
-	viper.SetDefault(SNCountField, 21)
-	viper.SetDefault(EOSURLField, "http://127.0.0.1:8888")
-	viper.SetDefault(EOSBPAccountField, "")
-	viper.SetDefault(EOSBPPrivateKeyField, "")
-	viper.SetDefault(EOSContractOwnerMField, "")
-	viper.SetDefault(EOSContractOwnerDField, "")
-	viper.SetDefault(EOSShadowAccountField, "")
-	viper.SetDefault(LoggerFilePathField, "./spotcheck.log")
-	viper.SetDefault(LoggerRotationTimeField, 24)
-	viper.SetDefault(LoggerMaxAgeField, 240)
-	viper.SetDefault(LoggerLevelField, "Info")
-	viper.SetDefault(MiscRecheckingPoolLengthField, 5000)
-	viper.SetDefault(MiscRecheckingQueueLengthField, 10000)
-	viper.SetDefault(MiscAvaliableNodeTimeGapField, 3)
-	viper.SetDefault(MiscMinerVersionThresholdField, 0)
-	viper.SetDefault(MiscPunishPhase1Field, 4)
-	viper.SetDefault(MiscPunishPhase2Field, 24)
-	viper.SetDefault(MiscPunishPhase3Field, 168)
-	viper.SetDefault(MiscPunishPhase1PercentField, 1)
-	viper.SetDefault(MiscPunishPhase2PercentField, 10)
-	viper.SetDefault(MiscPunishPhase3PercentField, 50)
-	viper.SetDefault(MiscSpotCheckSkipTimeField, 0)
-	viper.SetDefault(MiscSpotCheckIntervalField, 60)
-	viper.SetDefault(MiscSpotCheckConnectTimeoutField, 10)
-	viper.SetDefault(MiscErrorNodePercentThresholdField, 95)
-	viper.SetDefault(MiscExcludeAddrPrefixField, "")
-	if err := viper.Unmarshal(config); err != nil {
-		panic(fmt.Sprintf("unable to decode into struct, %v\n", err))
-	}
-	return config
 }
