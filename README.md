@@ -37,16 +37,16 @@ eos:
   shadow-account: "eosio"
 #日志相关配置
 logger:
-  #日志输入类型：stdout为输出到标准输出流，file为输出到文件，默认为stdout，此时只有level属性起作用，其他属性会被忽略
+  #日志输出类型：stdout为输出到标准输出流，file为输出到文件，默认为stdout，此时只有level属性起作用，其他属性会被忽略
   output: "file"
-  #日志路径，默认值为./spotcheck.log
-  file-path: "./spotcheck.log"
-  #日志拆分间隔时间，默认为24（小时）
-  rotation-time: 24
-  #日志最大保留时间，默认为240（10天）
-  max-age: 240
   #日志输出等级，默认为Info
   level: "Debug"
+  #日志路径，默认值为./spotcheck.log，仅在output=file时有效
+  file-path: "./spotcheck.log"
+  #日志拆分间隔时间，默认为24（小时），仅在output=file时有效
+  rotation-time: 24
+  #日志最大保留时间，默认为240（10天），仅在output=file时有效
+  max-age: 240
 #其他抽查相关配置
 misc:
   #抽查任务池大小，默认5000
@@ -69,7 +69,7 @@ misc:
   punish-phase3: 168
   #第三阶段抵押金惩罚比例，默认50（50%）
   punish-phase3-percent: 50
-  #抽查跳过该时间之前的分片，默认为0（格式为unix时间戳，单位为秒）
+  #抽查分片时跳过该时间之前的分片，默认为0（格式为unix时间戳，单位为秒）
   spotcheck-skip-time: 0
   #每台矿机两次抽查之间的时间间隔，默认60（分钟），间隔时间基于概率计算，有一定误差
   spotcheck-interval: 60
@@ -77,7 +77,7 @@ misc:
   spotcheck-connect-timeout: 10
   #矿机所属矿池的错误率大于该值时不进行惩罚，默认95（%）
   error-node-percent-threshold: 95
-  #允许该参数指定的IP地址段作为矿机的有效地址，默认为空，一般用于内网测试环境
+  #允许以该参数指定的值作为前缀的矿机地址为有效地址，默认为空，一般用于内网测试环境
   exclude-addr-prefix: "/ip4/172.17"
 ```
 启动服务：
