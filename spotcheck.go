@@ -496,7 +496,7 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	}
 	endTime := lastDNI.ID.Timestamp().Unix()
 	entry.Debugf("end time of spotcheck time range is %d", endTime)
-	if startTime > endTime {
+	if startTime >= endTime {
 		entry.Error("start time is bigger than end time, no valid VNIs can be spotchecked")
 		return "", fmt.Errorf("no valid VNIs can be spotchecked")
 	}
