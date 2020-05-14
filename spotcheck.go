@@ -373,6 +373,21 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	entry := log.WithFields(log.Fields{Function: "UpdateTaskStatus", TaskID: taskID, MinerID: invalidNode})
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+
+	//first task can be rechecked
+	opts := new(options.FindOneAndUpdateOptions)
+	opts = opts.SetReturnDocument(options.After)
+	sprn := new(SpotCheckRecord)
+	err := collectionS.FindOneAndUpdate(context.Background(), bson.M{"_id": taskID}, bson.M{"$inc": bson.M{"dup": 1}}, opts).Decode(sprn)
+	if err != nil {
+		entry.WithError(err).Errorf("increasing dup")
+		return err
+	}
+	if sprn.Dup != 1 {
+		entry.Debugf("dup is %d, skip rechecking", sprn.Dup)
+		return nil
+	}
+
 	//check if lastest spotcheck task of miner invalidNode is task with taskID
 	lastestSpotCheck := new(SpotCheckRecord)
 	opt := new(options.FindOptions)
@@ -400,6 +415,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 			return nil
 		}
 	}
+
 	//check if status of last spotcheck is 0, then update error count of miner invalidNode to 0
 	lastSpotCheck := new(SpotCheckRecord)
 	opt = new(options.FindOptions)
@@ -622,7 +638,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		spotCheckList.Timestamp = now
 		spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
 
-		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp}
+		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp, Dup: 0}
 		_, err = collectionS.InsertOne(context.Background(), spr)
 		if err != nil {
 			entry.WithError(err).Errorf("inserting spotcheck record of miner %d", node.ID)
