@@ -128,7 +128,7 @@ type SpotCheckRecord struct {
 	VNI       string `bson:"vni"`
 	Status    int32  `bson:"status"` // 0 - send to client, 1 - receive invalid node, 2 - rechecking
 	Timestamp int64  `bson:"timestamp"`
-	//ErrCount  int64  `bson:"errCount"`
+	Dup       int64  `bson:"dup"`
 }
 
 //DNI dni struct
