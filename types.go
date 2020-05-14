@@ -6,10 +6,15 @@ import (
 )
 
 const (
-	Function  = "function"
-	TaskID    = "taskID"
-	MinerID   = "minerID"
+	//Function tag
+	Function = "function"
+	//TaskID tag
+	TaskID = "taskID"
+	//MinerID tag
+	MinerID = "minerID"
+	//ShardHash tag
 	ShardHash = "vni"
+	//PoolOwner tag
 	PoolOwner = "poolOwner"
 )
 
