@@ -10,31 +10,27 @@ $ go build -o analysis
 bind-addr: ":8080"
 #分析库的URL地址，默认为mongodb://127.0.0.1:27017/?connect=direct
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
-#由各SN同步过来的mongoDB连接URL数组，默认值为长度21的字符串数组，内容均为mongodb://127.0.0.1:27017/?connect=direct
-mongodb-urls: 
-- "mongodb://127.0.0.1:27017/?connect=direct"
-- "mongodb://127.0.0.1:27017/?connect=direct"
-- "mongodb://127.0.0.1:27017/?connect=direct"
-- "mongodb://127.0.0.1:27017/?connect=direct"
-- "mongodb://127.0.0.1:27017/?connect=direct"
-#是否为数据库名添加索引编号，设置为true时mongodb-urls指定的数据库实例内的库名会依次加上索引值，比如yotta0、yotta1...，默认值为false，此配置一般用于docker多SN环境
-dbname-indexed: false
-#SN个数，默认值21
-sn-count: 5
-#EOS相关配置
-eos:
-  #EOS连接URL，默认值http://127.0.0.1:8888
-  url: "http://127.0.0.1:8888"
-  #BP账号，默认值为空，docker测试环境下为eosio
-  bp-account: "eosio"
-  #BP账号私钥，默认值为空，docker测试环境下为eosio的私钥
-  bp-privatekey: "5KXAHdRJLJQksQpu3tqKKpZmEZiWvtB7SixV1JUp9vy7bXByvHp"
-  #合约账号M，默认值为空，docker测试环境下为hddpool12345
-  contract-ownerm: "hddpool12345"
-  #合约账号D，默认值为空，docker测试环境下为hdddeposit12
-  contract-ownerd: "hdddeposit12"
-  #shadow账号，默认值为空，docker测试环境下为eosio
-  shadow-account: "eosio"
+#消息队列相关配置
+auramq:
+  #本地订阅者接收队列长度，默认值1024
+  subscriber-buffer-size: 1024
+  #客户端ping服务端时间间隔，默认值30秒
+  ping-wait: 30
+  #客户端读超时时间，默认值60秒
+  read-wait: 60
+  #客户端写超时时间，默认值10秒
+  write-wait: 10
+  #矿机信息同步主题名称，默认值sync
+  miner-sync-topic: "sync"
+  #需要监听的全部SN消息队列端口地址列表
+  all-sn-urls:
+  - "ws://172.17.0.2:8787/ws"
+  - "ws://172.17.0.3:8787/ws"
+  - "ws://172.17.0.4:8787/ws"
+  #鉴权用账号名，需要在BP事先建好，默认值yottanalysis
+  account: "yottanalysis"
+  #鉴权用私钥，为account在BP上的active私钥，默认值为空
+  private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
 #日志相关配置
 logger:
   #日志输出类型：stdout为输出到标准输出流，file为输出到文件，默认为stdout，此时只有level属性起作用，其他属性会被忽略
@@ -77,6 +73,8 @@ misc:
   spotcheck-connect-timeout: 10
   #矿机所属矿池的错误率大于该值时不进行惩罚，默认95（%）
   error-node-percent-threshold: 95
+  #超过该时间没有上报的矿机被认为是失效矿机并作为参数用于计算矿池错误率，默认为4小时
+  pool-error-miner-time-threshold: 14400
   #允许以该参数指定的值作为前缀的矿机地址为有效地址，默认为空，一般用于内网测试环境
   exclude-addr-prefix: "/ip4/172.17"
 ```
@@ -86,16 +84,17 @@ $ nohup ./analysis &
 ```
 如果不想使用配置文件也可以通过命令行标志来设置参数，标志指定的值也可以覆盖掉配置文件中对应的属性：
 ```
-$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --mongodb-urls "mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct,mongodb://127.0.0.1:27017/?connect=direct" --dbname-indexed "true" --sn-count "5" --eos.url "http://127.0.0.1:8888" --eos.bp-account "eosio" --eos.bp-privatekey "5KXAHdRJLJQksQpu3tqKKpZmEZiWvtB7SixV1JUp9vy7bXByvHp" --eos.contract-ownerm "hddpool12345" --eos.contract-ownerd "hdddeposit12" --eos.shadow-account "eosio" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-skip-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.exclude-addr-prefix "/ip4/172.17"
+$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --auramq.subscriber-buffer-size "1024" --auramq.ping-wait "30" --auramq.read-wait "60" --auramq.write-wait "10" --auramq.miner-sync-topic "sync" --auramq.all-sn-urls "ws://172.17.0.2:8787/ws,ws://172.17.0.3:8787/ws,ws://172.17.0.4:8787/ws" --auramq.account "yottanalysis" --auramq.private-key "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-skip-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.pool-error-miner-time-threshold "14400" --misc.exclude-addr-prefix "/ip4/172.17"
 ```
 SN端目前测试版本只需要重新编译`YDTNMgmtJavaBinding`项目的`dev`分支并替换原有jar包即可
 
 ## 2. 数据库配置：
-analysis服务需要从各SN所属的mongoDB数据库获取数据，为减轻主库压力analysis最好连接各mongoDB的备节点，可将配置文件中的`mongodb-urls`属性设置为analysis服务要连接的各SN备节点数据库的URL，需要按SN编号依次配置，且个数必须与`sn-count`设置值相同，否则程序启动时会报错。当`dbname-indexed`属性为`false`时，analysis服务会使用原始数据库名获取数据，比如yotta库或metabase库，当`dbname-indexed`属性为true时，数据库名会加上所属SN的编号，比如yotta0、yotta1...，该配置是为了便于多SN docker环境下的测试，由于docker多SN测试环境将所有数据库存于同一mongoDB实例内，且用编号区分各SN所属数据库，此时就可以将`dbname-indexed`设置为true，同时将`mongodb-urls`全部设置为唯一的mongoDB URL即可。架构图如下：
-
-![architecture.png](https://i.loli.net/2020/04/30/vFc6KSZ3YoQfuyJ.png)
-
-除此之外还需要建立名称为`analysis`的分析库用于记录抽查过程中的数据，该库包含两个collection，分别为`SpotCheck`和`SpotCheckNode`，`SpotCheck`字段如下：
+analysis服务需要将各SN所属mongoDB数据库的分块分片数据同步至analysis库，需使用![yotta-sync-server](https://github.com/yottachain/yotta-sync-server)项目进行数据同步。该项目会将全部SN的metabase库中的blocks和shards集合同步至analysis服务所接入mongoDB实例的metabase库，注意，在同步执行之前，需要为`shards`集合建立索引：
+```
+mongoshell> db.shards.createIndex({nodeId:1, _id:1})
+mongoshell> db.shards.createIndex({blockid:1})
+```
+除此之外还需要建立名称为`analysis`的分析库用于记录抽查过程中的数据，该库包含两个集合，分别为`SpotCheck`和`SpotCheckNode`，`SpotCheck`字段如下：
 | 字段 | 类型 | 描述 |
 | ---- | ---- | ---- |
 | _id | string | 抽查任务ID，主键 |
@@ -104,17 +103,19 @@ analysis服务需要从各SN所属的mongoDB数据库获取数据，为减轻主
 | status | int32 | 任务状态：0-任务已发出，1-任务复核中，2-校验完毕且有错误 |
 | timestamp	| int64	| 发出任务时的时间戳 |
 
-`SpotCheckNode`和yotta库的`Node`表字段相同，只是多了一个`errorCount`字段（类型为`int32`）用以记录抽查连续出错次数
+`SpotCheckNode`和yotta库的`Node`集合字段相同，只是多了一个`errorCount`字段（类型为`int32`）用以记录抽查连续出错次数
 
-另外需要为`SpotCheck`表添加索引：
+另外需要为`SpotCheck`集合添加索引：
 ```
 mongoshell> db.SpotCheck.createIndex({nid: 1, timestamp: -1})
 mongoshell> db.SpotCheck.createIndex({status: 1})
 mongoshell> db.SpotCheck.createIndex({timestamp: -1})
 ```
-除此之外，还需要为各SN所属yotta库中的`Shard`表建立索引：
+analysis服务启动后，也会从全部SN同步矿机信息至`yotta`库的`Node`集合，另外需要`Node`集合建立索引：
 ```
-mongoshell> db.Shards.createIndex({minerID:1, delete:1, _id:1})
+mongoshell> db.Node.createIndex({status:1, poolOwner:1})
+mongoshell> db.Node.createIndex({status:1, usedSpace:1, assignedSpace:1})
+mongoshell> db.Node.createIndex({status:1, version:1, timestamp:1})
 ```
 
 ## 3. SN端修改：
