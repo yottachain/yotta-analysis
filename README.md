@@ -111,7 +111,17 @@ mongoshell> db.SpotCheck.createIndex({nid: 1, timestamp: -1})
 mongoshell> db.SpotCheck.createIndex({status: 1})
 mongoshell> db.SpotCheck.createIndex({timestamp: -1})
 ```
-analysis服务启动后，也会从全部SN同步矿机信息至`yotta`库的`Node`集合，另外需要`Node`集合建立索引：
+analysis服务启动后，也会从全部SN同步矿机信息至`yotta`库的`Node`集合，需要先将SN中全部矿机数据导入该集合：
+在SN端：
+```
+$ mongoexport -h 127.0.0.1 --port 27017 -d yotta -c Node -o node.json
+```
+在分析服务器端：
+```
+$ mongoimport -h 127.0.0.1 --port 27017 -d analysis -c Node --file node.json
+```
+
+另外需要`Node`集合建立索引：
 ```
 mongoshell> db.Node.createIndex({status:1, poolOwner:1})
 mongoshell> db.Node.createIndex({status:1, usedSpace:1, assignedSpace:1})
