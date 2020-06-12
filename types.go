@@ -6,10 +6,21 @@ import (
 )
 
 const (
-	Function  = "function"
-	TaskID    = "taskID"
-	MinerID   = "minerID"
+	_                   = iota
+	UpdateUspaceMessage //UpdateUspaceMessage message type
+	PunishMessage       //PunishMessage message type
+)
+
+const (
+	//Function tag
+	Function = "function"
+	//TaskID tag
+	TaskID = "taskID"
+	//MinerID tag
+	MinerID = "minerID"
+	//ShardHash tag
 	ShardHash = "vni"
+	//PoolOwner tag
 	PoolOwner = "poolOwner"
 )
 
@@ -47,6 +58,8 @@ type Node struct {
 	ProductiveSpace int64 `bson:"productiveSpace"`
 	//used space of data node
 	UsedSpace int64 `bson:"usedSpace"`
+	//used spaces on each SN
+	Uspaces map[string]int64 `bson:"uspaces"`
 	//weight for allocate data node
 	Weight float64 `bson:"weight"`
 	//Is node valid
@@ -67,13 +80,15 @@ type Node struct {
 	Tx int64 `bson:"tx"`
 	//Rx
 	Rx int64 `bson:"rx"`
+	//Ext
+	Ext string `bson:"-"`
 	//ErrorCount
 	ErrorCount int32 `bson:"errorCount"`
 }
 
 //NewNode create a node struct
-func NewNode(id int32, nodeid string, pubkey string, owner string, profitAcc string, poolID string, poolOwner string, quota int64, addrs []string, cpu int32, memory int32, bandwidth int32, maxDataSpace int64, assignedSpace int64, productiveSpace int64, usedSpace int64, weight float64, valid int32, relay int32, status int32, timestamp int64, version int32, rebuilding int32, realSpace int64, tx int64, rx int64) *Node {
-	return &Node{ID: id, NodeID: nodeid, PubKey: pubkey, Owner: owner, ProfitAcc: profitAcc, PoolID: poolID, PoolOwner: poolOwner, Quota: quota, Addrs: addrs, CPU: cpu, Memory: memory, Bandwidth: bandwidth, MaxDataSpace: maxDataSpace, AssignedSpace: assignedSpace, ProductiveSpace: productiveSpace, UsedSpace: usedSpace, Weight: weight, Valid: valid, Relay: relay, Status: status, Timestamp: timestamp, Version: version, Rebuilding: rebuilding, RealSpace: realSpace, Tx: tx, Rx: rx}
+func NewNode(id int32, nodeid string, pubkey string, owner string, profitAcc string, poolID string, poolOwner string, quota int64, addrs []string, cpu int32, memory int32, bandwidth int32, maxDataSpace int64, assignedSpace int64, productiveSpace int64, usedSpace int64, weight float64, valid int32, relay int32, status int32, timestamp int64, version int32, rebuilding int32, realSpace int64, tx int64, rx int64, ext string) *Node {
+	return &Node{ID: id, NodeID: nodeid, PubKey: pubkey, Owner: owner, ProfitAcc: profitAcc, PoolID: poolID, PoolOwner: poolOwner, Quota: quota, Addrs: addrs, CPU: cpu, Memory: memory, Bandwidth: bandwidth, MaxDataSpace: maxDataSpace, AssignedSpace: assignedSpace, ProductiveSpace: productiveSpace, UsedSpace: usedSpace, Weight: weight, Valid: valid, Relay: relay, Status: status, Timestamp: timestamp, Version: version, Rebuilding: rebuilding, RealSpace: realSpace, Tx: tx, Rx: rx, Ext: ext}
 }
 
 //SuperNode instance
@@ -145,6 +160,14 @@ type VNI struct {
 	VNI []byte `bson:"vni"`
 }
 
+//Shards shard struct
+type Shard struct {
+	ID      int64            `bson:"_id"`
+	BlockID int64            `bson:"blockId"`
+	NodeID  int32            `bson:"nodeId"`
+	VHF     primitive.Binary `bson:"VHF"`
+}
+
 //PoolWeight infomation of pool
 type PoolWeight struct {
 	ID                string `bson:"_id"`
@@ -160,6 +183,9 @@ type PoolWeight struct {
 
 //relative DB and collection name
 var (
+	MetaDB           = "metabase"
+	Blocks           = "blocks"
+	Shards           = "shards"
 	YottaDB          = "yotta"
 	NodeTab          = "Node"
 	SuperNodeTab     = "SuperNode"
@@ -200,6 +226,7 @@ func (node *Node) Convert() *pb.NodeMsg {
 		AssignedSpace:   node.AssignedSpace,
 		ProductiveSpace: node.ProductiveSpace,
 		UsedSpace:       node.UsedSpace,
+		Uspaces:         node.Uspaces,
 		Weight:          node.Weight,
 		Valid:           node.Valid,
 		Relay:           node.Relay,
@@ -210,6 +237,7 @@ func (node *Node) Convert() *pb.NodeMsg {
 		RealSpace:       node.RealSpace,
 		Tx:              node.Tx,
 		Rx:              node.Rx,
+		Ext:             node.Ext,
 	}
 }
 
@@ -231,6 +259,7 @@ func (node *Node) Fillby(msg *pb.NodeMsg) {
 	node.AssignedSpace = msg.AssignedSpace
 	node.ProductiveSpace = msg.ProductiveSpace
 	node.UsedSpace = msg.UsedSpace
+	node.Uspaces = msg.Uspaces
 	node.Weight = msg.Weight
 	node.Valid = msg.Valid
 	node.Relay = msg.Relay
@@ -241,6 +270,7 @@ func (node *Node) Fillby(msg *pb.NodeMsg) {
 	node.RealSpace = msg.RealSpace
 	node.Tx = msg.Tx
 	node.Rx = msg.Rx
+	node.Ext = msg.Ext
 }
 
 // ConvertNodesToNodesMsg convert list of Node to list of NodeMsg

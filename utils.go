@@ -2,6 +2,7 @@ package ytanalysis
 
 import (
 	"bytes"
+	"encoding/binary"
 	"reflect"
 
 	cyp "github.com/libp2p/go-libp2p-core/crypto"
@@ -102,4 +103,41 @@ func IDFromPublicKey(publicKey string) (string, error) {
 	}
 	id, err := peer.IDFromPublicKey(rawpk)
 	return id.Pretty(), nil
+}
+
+//Int64ToBytes convert int64 to byte slice
+func Int64ToBytes(data int64) []byte {
+	bytebuf := bytes.NewBuffer([]byte{})
+	binary.Write(bytebuf, binary.BigEndian, data)
+	return bytebuf.Bytes()
+}
+
+//Int32ToBytes convert int32 to byte slice
+func Int32ToBytes(data int32) []byte {
+	bytebuf := bytes.NewBuffer([]byte{})
+	binary.Write(bytebuf, binary.BigEndian, data)
+	return bytebuf.Bytes()
+}
+
+//Uint32ToBytes convert uint32 to byte slice
+func Uint32ToBytes(data uint32) []byte {
+	bytebuf := bytes.NewBuffer([]byte{})
+	binary.Write(bytebuf, binary.BigEndian, data)
+	return bytebuf.Bytes()
+}
+
+//BytesToInt32 convert byte slice to int32
+func BytesToInt32(bys []byte) int32 {
+	bytebuff := bytes.NewBuffer(bys)
+	var data int32
+	binary.Read(bytebuff, binary.BigEndian, &data)
+	return data
+}
+
+//BytesToInt64 convet byte slice to int64
+func BytesToInt64(bys []byte) int64 {
+	bytebuff := bytes.NewBuffer(bys)
+	var data int64
+	binary.Read(bytebuff, binary.BigEndian, &data)
+	return data
 }

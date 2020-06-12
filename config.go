@@ -5,25 +5,23 @@ const (
 	BindAddrField = "bind-addr"
 	//AnalysisDBURLField Field name of analysisdb-url config
 	AnalysisDBURLField = "analysisdb-url"
-	//MongoDBURLSField Field name of mongodb-urls config
-	MongoDBURLSField = "mongodb-urls"
-	//DBNameIndexedField Field name of dbname-indexed config
-	DBNameIndexedField = "dbname-indexed"
-	//SNCountField Field name of sn-count config
-	SNCountField = "sn-count"
 
-	//EOSURLField Field name of eos.url config
-	EOSURLField = "eos.url"
-	//EOSBPAccountField Field name of eos.bp-account config
-	EOSBPAccountField = "eos.bp-account"
-	//EOSBPPrivateKeyField Field name of eos.bp-privatekey config
-	EOSBPPrivateKeyField = "eos.bp-privatekey"
-	//EOSContractOwnerMField Field name of eos.contract-ownerm config
-	EOSContractOwnerMField = "eos.contract-ownerm"
-	//EOSContractOwnerDField Field name of eos.contract-ownerd config
-	EOSContractOwnerDField = "eos.contract-ownerd"
-	//EOSShadowAccountField Field name of eos.shadow-account config
-	EOSShadowAccountField = "eos.shadow-account"
+	//AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
+	AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
+	//AuramqPingWaitField Field name of auramq.ping-wait
+	AuramqPingWaitField = "auramq.ping-wait"
+	//AuramqReadWaitField Field name of auramq.read-wait
+	AuramqReadWaitField = "auramq.read-wait"
+	//AuramqWriteWaitField Field name of auramq.write-wait
+	AuramqWriteWaitField = "auramq.write-wait"
+	//AuramqMinerSyncTopicField Field name of auramq.miner-sync-topic
+	AuramqMinerSyncTopicField = "auramq.miner-sync-topic"
+	//AuramqAllSNURLsField Field name of auramq.all-sn-urls
+	AuramqAllSNURLsField = "auramq.all-sn-urls"
+	//AuramqAccountField Field name of auramq.account
+	AuramqAccountField = "auramq.account"
+	//AuramqPrivateKeyField Field name of auramq.private-key
+	AuramqPrivateKeyField = "auramq.private-key"
 
 	//LoggerOutputField Field name of logger.output config
 	LoggerOutputField = "logger.output"
@@ -64,30 +62,31 @@ const (
 	MiscSpotCheckConnectTimeoutField = "misc.spotcheck-connect-timeout"
 	//MiscErrorNodePercentThresholdField Field name of misc.error-node-percent-threshold config
 	MiscErrorNodePercentThresholdField = "misc.error-node-percent-threshold"
+	//MiscPoolErrorMinerTimeThresholdField Field name of misc.pool-error-miner-time-threshold
+	MiscPoolErrorMinerTimeThresholdField = "pool-error-miner-time-threshold"
 	//MiscExcludeAddrPrefixField Field name of misc.exclude-addr-prefix config
 	MiscExcludeAddrPrefixField = "misc.exclude-addr-prefix"
 )
 
 //Config system configuration
 type Config struct {
-	BindAddr      string      `mapstructure:"bind-addr"`
-	AnalysisDBURL string      `mapstructure:"analysisdb-url"`
-	MongoDBURLs   []string    `mapstructure:"mongodb-urls"`
-	DBNameIndexed bool        `mapstructure:"dbname-indexed"`
-	SNCount       int64       `mapstructure:"sn-count"`
-	EOS           *EOSConfig  `mapstructure:"eos"`
-	Logger        *LogConfig  `mapstructure:"logger"`
-	MiscConfig    *MiscConfig `mapstructure:"misc"`
+	BindAddr      string        `mapstructure:"bind-addr"`
+	AnalysisDBURL string        `mapstructure:"analysisdb-url"`
+	AuraMQ        *AuraMQConfig `mapstructure:"auramq"`
+	Logger        *LogConfig    `mapstructure:"logger"`
+	MiscConfig    *MiscConfig   `mapstructure:"misc"`
 }
 
-//EOSConfig EOS configuration
-type EOSConfig struct {
-	URL            string `mapstructure:"url"`
-	BPAccount      string `mapstructure:"bp-account"`
-	BPPrivateKey   string `mapstructure:"bp-privatekey"`
-	ContractOwnerM string `mapstructure:"contract-ownerm"`
-	ContractOwnerD string `mapstructure:"contract-ownerd"`
-	ShadowAccount  string `mapstructure:"shadow-account"`
+//AuraMQConfig auramq configuration
+type AuraMQConfig struct {
+	SubscriberBufferSize int      `mapstructure:"subscriber-buffer-size"`
+	PingWait             int      `mapstructure:"ping-wait"`
+	ReadWait             int      `mapstructure:"read-wait"`
+	WriteWait            int      `mapstructure:"write-wait"`
+	MinerSyncTopic       string   `mapstructure:"miner-sync-topic"`
+	AllSNURLs            []string `mapstructure:"all-sn-urls"`
+	Account              string   `mapstructure:"account"`
+	PrivateKey           string   `mapstructure:"private-key"`
 }
 
 //LogConfig system log configuration
@@ -101,19 +100,20 @@ type LogConfig struct {
 
 //MiscConfig miscellaneous configuration
 type MiscConfig struct {
-	RecheckingPoolLength      int    `mapstructure:"reckecking-pool-length"`
-	RecheckingQueueLength     int    `mapstructure:"reckecking-queue-length"`
-	AvaliableNodeTimeGap      int64  `mapstructure:"avaliable-node-time-gap"`
-	MinerVersionThreshold     int32  `mapstructure:"miner-version-threshold"`
-	PunishPhase1              int32  `mapstructure:"punish-phase1"`
-	PunishPhase1Percent       int32  `mapstructure:"punish-phase1-percent"`
-	PunishPhase2              int32  `mapstructure:"punish-phase2"`
-	PunishPhase2Percent       int32  `mapstructure:"punish-phase2-percent"`
-	PunishPhase3              int32  `mapstructure:"punish-phase3"`
-	PunishPhase3Percent       int32  `mapstructure:"punish-phase3-percent"`
-	SpotCheckSkipTime         int64  `mapstructure:"spotcheck-skip-time"`
-	SpotCheckInterval         int64  `mapstructure:"spotcheck-interval"`
-	SpotCheckConnectTimeout   int64  `mapstructure:"spotcheck-connect-timeout"`
-	ErrorNodePercentThreshold int32  `mapstructure:"error-node-percent-threshold"`
-	ExcludeAddrPrefix         string `mapstructure:"exclude-addr-prefix"`
+	RecheckingPoolLength        int    `mapstructure:"reckecking-pool-length"`
+	RecheckingQueueLength       int    `mapstructure:"reckecking-queue-length"`
+	AvaliableNodeTimeGap        int64  `mapstructure:"avaliable-node-time-gap"`
+	MinerVersionThreshold       int32  `mapstructure:"miner-version-threshold"`
+	PunishPhase1                int32  `mapstructure:"punish-phase1"`
+	PunishPhase1Percent         int32  `mapstructure:"punish-phase1-percent"`
+	PunishPhase2                int32  `mapstructure:"punish-phase2"`
+	PunishPhase2Percent         int32  `mapstructure:"punish-phase2-percent"`
+	PunishPhase3                int32  `mapstructure:"punish-phase3"`
+	PunishPhase3Percent         int32  `mapstructure:"punish-phase3-percent"`
+	SpotCheckSkipTime           int64  `mapstructure:"spotcheck-skip-time"`
+	SpotCheckInterval           int64  `mapstructure:"spotcheck-interval"`
+	SpotCheckConnectTimeout     int64  `mapstructure:"spotcheck-connect-timeout"`
+	ErrorNodePercentThreshold   int32  `mapstructure:"error-node-percent-threshold"`
+	PoolErrorMinerTimeThreshold int32  `mapstructure:"pool-error-miner-time-threshold"`
+	ExcludeAddrPrefix           string `mapstructure:"exclude-addr-prefix"`
 }

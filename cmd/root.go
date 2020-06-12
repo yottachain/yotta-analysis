@@ -32,11 +32,11 @@ var rootCmd = &cobra.Command{
 		if err := viper.Unmarshal(config); err != nil {
 			panic(fmt.Sprintf("unable to decode into config struct, %v\n", err))
 		}
-		if len(config.MongoDBURLs) != int(config.SNCount) {
-			panic("count of mongoDB URL is not equal to SN count\n")
-		}
+		// if len(config.MongoDBURLs) != int(config.SNCount) {
+		// 	panic("count of mongoDB URL is not equal to SN count\n")
+		// }
 		initLog(config)
-		analyser, err := ytanalysis.New(config.MongoDBURLs, config.DBNameIndexed, config.AnalysisDBURL, config.EOS.URL, config.EOS.BPAccount, config.EOS.BPPrivateKey, config.EOS.ContractOwnerM, config.EOS.ContractOwnerD, config.EOS.ShadowAccount, config.SNCount, config.MiscConfig)
+		analyser, err := ytanalysis.New(config.AnalysisDBURL, config.AuraMQ, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
@@ -150,25 +150,23 @@ var (
 	DefaultBindAddr string = ":8080"
 	//DefaultAnalysisDBURL default value of AnalysisDBURL
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
-	//DefaultMongoDBURLS default value of MongoDBURLS
-	DefaultMongoDBURLS []string = []string{"mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct", "mongodb://127.0.0.1:27017/?connect=direct"}
-	//DefaultDBNameIndexed default value of DBNameIndexed
-	DefaultDBNameIndexed bool = false
-	//DefaultSNCount default value of SNCount
-	DefaultSNCount int64 = 21
 
-	//DefaultEOSURL default value of EOSURL
-	DefaultEOSURL string = "http://127.0.0.1:8888"
-	//DefaultEOSBPAccount default value of EOSBPAccount
-	DefaultEOSBPAccount string = ""
-	//DefaultEOSBPPrivateKey default value of EOSBPPrivateKey
-	DefaultEOSBPPrivateKey string = ""
-	//DefaultEOSContractOwnerM default value of EOSContractOwnerM
-	DefaultEOSContractOwnerM string = ""
-	//DefaultEOSContractOwnerD default value of EOSContractOwnerD
-	DefaultEOSContractOwnerD string = ""
-	//DefaultEOSShadowAccount default value of EOSShadowAccount
-	DefaultEOSShadowAccount string = ""
+	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
+	DefaultAuramqSubscriberBufferSize = 1024
+	//DefaultAuramqPingWait default value of AuramqPingWait
+	DefaultAuramqPingWait = 30
+	//DefaultAuramqReadWait default value of AuramqReadWait
+	DefaultAuramqReadWait = 60
+	//DefaultAuramqWriteWait default value of AuramqWriteWait
+	DefaultAuramqWriteWait = 10
+	//DefaultAuramqMinerSyncTopic default value of AuramqMinerSyncTopic
+	DefaultAuramqMinerSyncTopic = "sync"
+	//DefaultAuramqAllSNURLs default value of AuramqAllSNURLs
+	DefaultAuramqAllSNURLs = []string{}
+	//DefaultAuramqAccount default value of AuramqAccount
+	DefaultAuramqAccount = ""
+	//DefaultAuramqPrivateKey default value of AuramqPrivateKey
+	DefaultAuramqPrivateKey = ""
 
 	//DefaultLoggerOutput default value of LoggerOutput
 	DefaultLoggerOutput string = "stdout"
@@ -209,6 +207,8 @@ var (
 	DefaultMiscSpotCheckConnectTimeout int64 = 10
 	//DefaultMiscErrorNodePercentThreshold default value of MiscErrorNodePercentThreshold
 	DefaultMiscErrorNodePercentThreshold int32 = 95
+	//DefaultPoolErrorMinerTimeThreshold default value of MiscPoolErrorMinerTimeThreshold
+	DefaultMiscPoolErrorMinerTimeThreshold int32 = 14400
 	//DefaultMiscExcludeAddrPrefix default value of MiscExcludeAddrPrefix
 	DefaultMiscExcludeAddrPrefix string = ""
 )
@@ -219,25 +219,23 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.BindAddrField, rootCmd.PersistentFlags().Lookup(ytanalysis.BindAddrField))
 	rootCmd.PersistentFlags().String(ytanalysis.AnalysisDBURLField, DefaultAnalysisDBURL, "mongoDB URL of analysis database")
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
-	rootCmd.PersistentFlags().StringSlice(ytanalysis.MongoDBURLSField, DefaultMongoDBURLS, "URLs of SN-syncing database, in the form of --mongodb-urls \"URL1,URL2,URL3\"")
-	viper.BindPFlag(ytanalysis.MongoDBURLSField, rootCmd.PersistentFlags().Lookup(ytanalysis.MongoDBURLSField))
-	rootCmd.PersistentFlags().Bool(ytanalysis.DBNameIndexedField, DefaultDBNameIndexed, "if value is true, add index number as suffix of each database name")
-	viper.BindPFlag(ytanalysis.DBNameIndexedField, rootCmd.PersistentFlags().Lookup(ytanalysis.DBNameIndexedField))
-	rootCmd.PersistentFlags().Int64(ytanalysis.SNCountField, DefaultSNCount, "count of SN")
-	viper.BindPFlag(ytanalysis.SNCountField, rootCmd.PersistentFlags().Lookup(ytanalysis.SNCountField))
-	//EOS config
-	rootCmd.PersistentFlags().String(ytanalysis.EOSURLField, DefaultEOSURL, "URL of EOS server")
-	viper.BindPFlag(ytanalysis.EOSURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSURLField))
-	rootCmd.PersistentFlags().String(ytanalysis.EOSBPAccountField, DefaultEOSBPAccount, "Account name of SN")
-	viper.BindPFlag(ytanalysis.EOSBPAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSBPAccountField))
-	rootCmd.PersistentFlags().String(ytanalysis.EOSBPPrivateKeyField, DefaultEOSBPPrivateKey, "Private key of SN account")
-	viper.BindPFlag(ytanalysis.EOSBPPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSBPPrivateKeyField))
-	rootCmd.PersistentFlags().String(ytanalysis.EOSContractOwnerMField, DefaultEOSContractOwnerM, "Account name of contract owner M")
-	viper.BindPFlag(ytanalysis.EOSContractOwnerMField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSContractOwnerMField))
-	rootCmd.PersistentFlags().String(ytanalysis.EOSContractOwnerDField, DefaultEOSContractOwnerD, "Account name of contract owner D")
-	viper.BindPFlag(ytanalysis.EOSContractOwnerDField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSContractOwnerDField))
-	rootCmd.PersistentFlags().String(ytanalysis.EOSShadowAccountField, DefaultEOSShadowAccount, "Account name of shadow account")
-	viper.BindPFlag(ytanalysis.EOSShadowAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.EOSShadowAccountField))
+	//AuraMQ config
+	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
+	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))
+	rootCmd.PersistentFlags().Int(ytanalysis.AuramqPingWaitField, DefaultAuramqPingWait, "ping interval of MQ client")
+	viper.BindPFlag(ytanalysis.AuramqPingWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPingWaitField))
+	rootCmd.PersistentFlags().Int(ytanalysis.AuramqReadWaitField, DefaultAuramqReadWait, "read wait of MQ client")
+	viper.BindPFlag(ytanalysis.AuramqReadWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqReadWaitField))
+	rootCmd.PersistentFlags().Int(ytanalysis.AuramqWriteWaitField, DefaultAuramqWriteWait, "write wait of MQ client")
+	viper.BindPFlag(ytanalysis.AuramqWriteWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqWriteWaitField))
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqMinerSyncTopicField, DefaultAuramqMinerSyncTopic, "miner sync topic name")
+	viper.BindPFlag(ytanalysis.AuramqMinerSyncTopicField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqMinerSyncTopicField))
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.AuramqAllSNURLsField, DefaultAuramqAllSNURLs, "all URLs of MQ port, in the form of --auramq.all-sn-urls \"URL1,URL2,URL3\"")
+	viper.BindPFlag(ytanalysis.AuramqAllSNURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAllSNURLsField))
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "yottanalysis")
+	viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "yottanalysis")
+	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
 	//logger config
 	rootCmd.PersistentFlags().String(ytanalysis.LoggerOutputField, DefaultLoggerOutput, "Output type of logger(stdout or file)")
 	viper.BindPFlag(ytanalysis.LoggerOutputField, rootCmd.PersistentFlags().Lookup(ytanalysis.LoggerOutputField))
@@ -278,6 +276,8 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.MiscSpotCheckConnectTimeoutField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckConnectTimeoutField))
 	rootCmd.PersistentFlags().Int32(ytanalysis.MiscErrorNodePercentThresholdField, DefaultMiscErrorNodePercentThreshold, "Percentage of valid miner in th pool, bigger then which punishment will be skipped")
 	viper.BindPFlag(ytanalysis.MiscErrorNodePercentThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscErrorNodePercentThresholdField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPoolErrorMinerTimeThresholdField, DefaultMiscPoolErrorMinerTimeThreshold, "Miner with down time greater than this value is considered as invalid miner during pool weight related calculation")
+	viper.BindPFlag(ytanalysis.MiscPoolErrorMinerTimeThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPoolErrorMinerTimeThresholdField))
 	rootCmd.PersistentFlags().String(ytanalysis.MiscExcludeAddrPrefixField, DefaultMiscExcludeAddrPrefix, "Miners with this value as address prefix is considered as valid")
 	viper.BindPFlag(ytanalysis.MiscExcludeAddrPrefixField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscExcludeAddrPrefixField))
 }
