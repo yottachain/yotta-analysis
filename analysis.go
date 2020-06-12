@@ -101,7 +101,13 @@ func syncNode(cli *mongo.Client, node *Node, excludeAddrPrefix string) error {
 	if err != nil {
 		errstr := err.Error()
 		if !strings.ContainsAny(errstr, "duplicate key error") {
-			entry.WithError(err).Warnf("inserting node %d to database:", node.ID)
+			entry.WithError(err).Warnf("inserting node %d to database", node.ID)
+			return err
+		}
+		oldNode := new(Node)
+		err := collection.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(oldNode)
+		if err != nil {
+			entry.WithError(err).Warnf("fetching node %d failed", node.ID)
 			return err
 		}
 		cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
@@ -112,10 +118,18 @@ func syncNode(cli *mongo.Client, node *Node, excludeAddrPrefix string) error {
 		opts = opts.SetReturnDocument(options.After)
 		result := collection.FindOneAndUpdate(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
 		updatedNode := new(Node)
-		err := result.Decode(updatedNode)
+		err = result.Decode(updatedNode)
 		if err != nil {
 			entry.WithError(err).Warnf("updating record of node %d", node.ID)
 			return err
+		}
+		if oldNode.Status != updatedNode.Status {
+			collectionSN := cli.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+			_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": bson.M{"status": updatedNode.Status}})
+			if err != nil {
+				entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
+				return err
+			}
 		}
 	}
 	return nil
