@@ -383,6 +383,17 @@ func ConvertSpotCheckTasksToSpotCheckTasksMsg(spotCheckTasks []*SpotCheckTask) [
 	return spotCheckTaskMsgs
 }
 
+// ConvertSpotCheckTasksMsgToSpotCheckTasks convert list of SpotCheckTaskMsg to list of SpotCheckTaskMsg
+func ConvertSpotCheckTasksMsgToSpotCheckTasks(msgs []*pb.SpotCheckTaskMsg) []*SpotCheckTask {
+	spotCheckTasks := make([]*SpotCheckTask, len(msgs))
+	for i, s := range msgs {
+		task := new(SpotCheckTask)
+		task.Fillby(s)
+		spotCheckTasks[i] = task
+	}
+	return spotCheckTasks
+}
+
 // Convert convert SpotCheckTask strcut to SpotCheckTaskMsg
 func (spotCheckList *SpotCheckList) Convert() *pb.SpotCheckListMsg {
 	return &pb.SpotCheckListMsg{
@@ -390,6 +401,18 @@ func (spotCheckList *SpotCheckList) Convert() *pb.SpotCheckListMsg {
 		TaskList:  ConvertSpotCheckTasksToSpotCheckTasksMsg(spotCheckList.TaskList),
 		Timestamp: spotCheckList.Timestamp,
 	}
+}
+
+//Fillby fill SpotCheckList struct by SpotCheckListMsg struct
+func (spotCheckList *SpotCheckList) Fillby(msg *pb.SpotCheckListMsg) error {
+	taskID, err := primitive.ObjectIDFromHex(msg.TaskID)
+	if err != nil {
+		return err
+	}
+	spotCheckList.TaskID = taskID
+	spotCheckList.Timestamp = msg.Timestamp
+	spotCheckList.TaskList = ConvertSpotCheckTasksMsgToSpotCheckTasks(msg.TaskList)
+	return nil
 }
 
 // ConvertSpotCheckListsToSpotCheckListsMsg convert list of SpotCheckList to list of SpotCheckListMsg

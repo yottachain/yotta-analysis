@@ -234,7 +234,7 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AuramqAllSNURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAllSNURLsField))
 	rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "yottanalysis")
 	viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "yottanalysis")
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "")
 	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
 	//logger config
 	rootCmd.PersistentFlags().String(ytanalysis.LoggerOutputField, DefaultLoggerOutput, "Output type of logger(stdout or file)")
