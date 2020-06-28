@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	ytanalysis "github.com/yottachain/yotta-analysis"
-	"github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 )
 
 var cfgFile string
@@ -232,9 +232,9 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AuramqMinerSyncTopicField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqMinerSyncTopicField))
 	rootCmd.PersistentFlags().StringSlice(ytanalysis.AuramqAllSNURLsField, DefaultAuramqAllSNURLs, "all URLs of MQ port, in the form of --auramq.all-sn-urls \"URL1,URL2,URL3\"")
 	viper.BindPFlag(ytanalysis.AuramqAllSNURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAllSNURLsField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "yottanalysis")
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "BP account for anthentication")
 	viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "yottanalysis")
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "")
 	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
 	//logger config
 	rootCmd.PersistentFlags().String(ytanalysis.LoggerOutputField, DefaultLoggerOutput, "Output type of logger(stdout or file)")

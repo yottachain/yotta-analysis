@@ -27,7 +27,7 @@ auramq:
   - "ws://172.17.0.2:8787/ws"
   - "ws://172.17.0.3:8787/ws"
   - "ws://172.17.0.4:8787/ws"
-  #鉴权用账号名，需要在BP事先建好，默认值yottanalysis
+  #鉴权用账号名，需要在BP事先建好，默认值为空
   account: "yottanalysis"
   #鉴权用私钥，为account在BP上的active私钥，默认值为空
   private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
@@ -111,7 +111,7 @@ mongoshell> db.SpotCheck.createIndex({nid: 1, timestamp: -1})
 mongoshell> db.SpotCheck.createIndex({status: 1})
 mongoshell> db.SpotCheck.createIndex({timestamp: -1})
 ```
-analysis服务启动后，也会从全部SN同步矿机信息至`yotta`库的`Node`集合，需要先将SN中全部矿机数据导入该集合：
+analysis服务启动后，也会从全部SN同步矿机信息至`analysis`库的`Node`集合，需要先将SN中全部矿机数据导入该集合：
 在SN端：
 ```
 $ mongoexport -h 127.0.0.1 --port 27017 -d yotta -c Node -o node.json
@@ -121,7 +121,7 @@ $ mongoexport -h 127.0.0.1 --port 27017 -d yotta -c Node -o node.json
 $ mongoimport -h 127.0.0.1 --port 27017 -d analysis -c Node --file node.json
 ```
 
-另外需要`Node`集合建立索引：
+另外需要为`Node`集合建立索引：
 ```
 mongoshell> db.Node.createIndex({status:1, poolOwner:1})
 mongoshell> db.Node.createIndex({status:1, usedSpace:1, assignedSpace:1})
