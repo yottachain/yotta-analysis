@@ -13,7 +13,7 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
 	pbh "github.com/yottachain/P2PHost/pb"
-	pb "github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"

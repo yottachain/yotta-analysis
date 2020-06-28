@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	ytanalysis "github.com/yottachain/yotta-analysis"
-	"github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 )
 
 var cfgFile string

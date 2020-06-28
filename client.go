@@ -3,7 +3,7 @@ package ytanalysis
 import (
 	context "context"
 
-	pb "github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"google.golang.org/grpc"
 )
 

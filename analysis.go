@@ -12,7 +12,7 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	"github.com/ivpusic/grpool"
 	log "github.com/sirupsen/logrus"
-	pb "github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	ytsync "github.com/yottachain/yotta-analysis/sync"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

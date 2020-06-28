@@ -5,8 +5,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/yottachain/yotta-analysis/pb"
-
 	"github.com/aurawing/auramq"
 	"github.com/aurawing/auramq/msg"
 	wsclient "github.com/aurawing/auramq/ws/cli"
@@ -14,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/subchen/go-trylock/v2"
 	ytcrypto "github.com/yottachain/YTCrypto"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 )
 
 //Service sync service

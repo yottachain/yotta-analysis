@@ -1,7 +1,7 @@
 package ytanalysis
 
 import (
-	pb "github.com/yottachain/yotta-analysis/pb"
+	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
