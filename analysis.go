@@ -83,7 +83,7 @@ func syncNode(cli *mongo.Client, node *Node, excludeAddrPrefix string) error {
 		return errors.New("node ID cannot be 0")
 	}
 	node.Addrs = checkPublicAddrs(node.Addrs, excludeAddrPrefix)
-	collection := cli.Database(YottaDB).Collection(NodeTab)
+	collection := cli.Database(AnalysisDB).Collection(NodeTab)
 	otherDoc := bson.A{}
 	if node.Ext != "" && node.Ext[0] == '[' && node.Ext[len(node.Ext)-1] == ']' {
 		var bdoc interface{}

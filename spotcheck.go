@@ -51,7 +51,7 @@ func (analyser *Analyser) StartRecheck() {
 
 func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 	entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
-	collection := analyser.analysisdbClient.Database(YottaDB).Collection(NodeTab)
+	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	errTime := time.Now().Unix() - int64(analyser.Params.PoolErrorMinerTimeThreshold) //int64(spotcheckInterval)*60 - int64(punishPhase1)*punishGapUnit
 	pipeline := mongo.Pipeline{
 		{{"$match", bson.D{{"poolOwner", poolOwner}, {"status", bson.D{{"$lt", 3}}}}}},
@@ -90,7 +90,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	node := new(Node)
-	err := analyser.analysisdbClient.Database(YottaDB).Collection(NodeTab).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
+	err := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
 	if err != nil {
 		entry.WithError(err).Error("decoding miner info which performing rechecking")
 		defer func() {
@@ -599,7 +599,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		now := time.Now().Unix()
 		// snID := rand.Int31n(int32(analyser.SnCount))
 		// entry.Debugf("selected SN %d", snID)
-		collectionN := analyser.analysisdbClient.Database(YottaDB).Collection(NodeTab)
+		collectionN := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 
 		total, err := collectionN.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
 		if err != nil {
@@ -712,7 +712,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 //IsNodeSelected check if node is selected for spotchecking
 func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	entry := log.WithFields(log.Fields{Function: "IsNodeSelected"})
-	collection := analyser.analysisdbClient.Database(YottaDB).Collection(NodeTab)
+	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
 	if err != nil {
 		entry.WithError(err).Error("calculating count of spotcheckable miners")
