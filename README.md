@@ -27,7 +27,7 @@ auramq:
   - "ws://172.17.0.2:8787/ws"
   - "ws://172.17.0.3:8787/ws"
   - "ws://172.17.0.4:8787/ws"
-  #鉴权用账号名，需要在BP事先建好，默认值yottanalysis
+  #鉴权用账号名，需要在BP事先建好，默认值为空
   account: "yottanalysis"
   #鉴权用私钥，为account在BP上的active私钥，默认值为空
   private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
