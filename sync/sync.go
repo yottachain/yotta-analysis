@@ -22,7 +22,7 @@ type Service struct {
 }
 
 //StartSync start syncing
-func StartSync(subscriberBufferSize, pingWait, readWait, writeWait int, topic string, urls []string, callback func(msg *msg.Message), account, privateKey string) (map[int]*Service, error) {
+func StartSync(subscriberBufferSize, pingWait, readWait, writeWait int, topic string, urls []string, callback func(msg *msg.Message), account, privateKey, clientID string) (map[int]*Service, error) {
 	entry := log.WithFields(log.Fields{"function": "StartSync"})
 	serviceMap := make(map[int]*Service)
 	data := []byte(getRandomString(8))
@@ -48,7 +48,7 @@ func StartSync(subscriberBufferSize, pingWait, readWait, writeWait int, topic st
 		go func() {
 			for {
 				svc := serviceMap[snID]
-				cli, err := wsclient.Connect(wsurl, callback, &msg.AuthReq{Id: "analysis", Credential: crendData}, []string{topic}, subscriberBufferSize, pingWait, readWait, writeWait)
+				cli, err := wsclient.Connect(wsurl, callback, &msg.AuthReq{Id: clientID, Credential: crendData}, []string{topic}, subscriberBufferSize, pingWait, readWait, writeWait)
 				if err != nil {
 					entry.WithError(err).Errorf("connecting to SN%d", snID)
 					time.Sleep(time.Duration(3) * time.Second)
@@ -58,7 +58,7 @@ func StartSync(subscriberBufferSize, pingWait, readWait, writeWait int, topic st
 				svc.lock.Unlock()
 				cli.Run()
 				svc.lock.Lock()
-				entry.WithError(err).Errorf("connect to SN%d successful", snID)
+				entry.Infof("connect to SN%d successful", snID)
 				time.Sleep(time.Duration(3) * time.Second)
 			}
 		}()

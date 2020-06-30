@@ -167,6 +167,8 @@ var (
 	DefaultAuramqAccount = ""
 	//DefaultAuramqPrivateKey default value of AuramqPrivateKey
 	DefaultAuramqPrivateKey = ""
+	//DefaultAuramqClientID default value of AuramqClientID
+	DefaultAuramqClientID = "yottaanalysis"
 
 	//DefaultLoggerOutput default value of LoggerOutput
 	DefaultLoggerOutput string = "stdout"
@@ -207,7 +209,7 @@ var (
 	DefaultMiscSpotCheckConnectTimeout int64 = 10
 	//DefaultMiscErrorNodePercentThreshold default value of MiscErrorNodePercentThreshold
 	DefaultMiscErrorNodePercentThreshold int32 = 95
-	//DefaultPoolErrorMinerTimeThreshold default value of MiscPoolErrorMinerTimeThreshold
+	//DefaultMiscPoolErrorMinerTimeThreshold default value of MiscPoolErrorMinerTimeThreshold
 	DefaultMiscPoolErrorMinerTimeThreshold int32 = 14400
 	//DefaultMiscExcludeAddrPrefix default value of MiscExcludeAddrPrefix
 	DefaultMiscExcludeAddrPrefix string = ""
@@ -236,6 +238,8 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
 	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "")
 	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
+	rootCmd.PersistentFlags().String(ytanalysis.AuramqClientIDField, DefaultAuramqClientID, "client ID for identifying MQ client")
+	viper.BindPFlag(ytanalysis.AuramqClientIDField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqClientIDField))
 	//logger config
 	rootCmd.PersistentFlags().String(ytanalysis.LoggerOutputField, DefaultLoggerOutput, "Output type of logger(stdout or file)")
 	viper.BindPFlag(ytanalysis.LoggerOutputField, rootCmd.PersistentFlags().Lookup(ytanalysis.LoggerOutputField))

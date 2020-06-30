@@ -68,7 +68,7 @@ func New(analysisDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyse
 			}
 		}
 	}
-	m, err := ytsync.StartSync(mqconf.SubscriberBufferSize, mqconf.PingWait, mqconf.ReadWait, mqconf.WriteWait, mqconf.MinerSyncTopic, mqconf.AllSNURLs, callback, mqconf.Account, mqconf.PrivateKey)
+	m, err := ytsync.StartSync(mqconf.SubscriberBufferSize, mqconf.PingWait, mqconf.ReadWait, mqconf.WriteWait, mqconf.MinerSyncTopic, mqconf.AllSNURLs, callback, mqconf.Account, mqconf.PrivateKey, mqconf.ClientID)
 	if err != nil {
 		entry.WithError(err).Error("creating mq clients map failed")
 		return nil, err
