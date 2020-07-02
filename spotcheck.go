@@ -195,7 +195,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 			}
 			if !b {
 				errCount++
-				entry.WithError(err).Debugf("checking shard %d successful: %s", i, spr.VNI)
+				entry.Debugf("checking shard %d successful: %s", i, spr.VNI)
 			}
 		}
 		defer func() {
