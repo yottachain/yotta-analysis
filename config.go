@@ -22,6 +22,8 @@ const (
 	AuramqAccountField = "auramq.account"
 	//AuramqPrivateKeyField Field name of auramq.private-key
 	AuramqPrivateKeyField = "auramq.private-key"
+	//AuramqClientIDField Field name of auramq.client-id
+	AuramqClientIDField = "auramq.client-id"
 
 	//LoggerOutputField Field name of logger.output config
 	LoggerOutputField = "logger.output"
@@ -87,6 +89,7 @@ type AuraMQConfig struct {
 	AllSNURLs            []string `mapstructure:"all-sn-urls"`
 	Account              string   `mapstructure:"account"`
 	PrivateKey           string   `mapstructure:"private-key"`
+	ClientID             string   `mapstructure:"client-id"`
 }
 
 //LogConfig system log configuration

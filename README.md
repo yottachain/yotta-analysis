@@ -31,6 +31,8 @@ auramq:
   account: "yottanalysis"
   #鉴权用私钥，为account在BP上的active私钥，默认值为空
   private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
+  #MQ客户端ID，连接SN的MQ时使用，必须保证在MQ server端唯一，默认值为yottaanalysis
+  client-id: "yottaanalysis"
 #日志相关配置
 logger:
   #日志输出类型：stdout为输出到标准输出流，file为输出到文件，默认为stdout，此时只有level属性起作用，其他属性会被忽略
@@ -84,7 +86,7 @@ $ nohup ./analysis &
 ```
 如果不想使用配置文件也可以通过命令行标志来设置参数，标志指定的值也可以覆盖掉配置文件中对应的属性：
 ```
-$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --auramq.subscriber-buffer-size "1024" --auramq.ping-wait "30" --auramq.read-wait "60" --auramq.write-wait "10" --auramq.miner-sync-topic "sync" --auramq.all-sn-urls "ws://172.17.0.2:8787/ws,ws://172.17.0.3:8787/ws,ws://172.17.0.4:8787/ws" --auramq.account "yottanalysis" --auramq.private-key "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-skip-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.pool-error-miner-time-threshold "14400" --misc.exclude-addr-prefix "/ip4/172.17"
+$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --auramq.subscriber-buffer-size "1024" --auramq.ping-wait "30" --auramq.read-wait "60" --auramq.write-wait "10" --auramq.miner-sync-topic "sync" --auramq.all-sn-urls "ws://172.17.0.2:8787/ws,ws://172.17.0.3:8787/ws,ws://172.17.0.4:8787/ws" --auramq.account "yottanalysis" --auramq.private-key "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7" --auramq.client-id "yottaanalysis" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-skip-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.pool-error-miner-time-threshold "14400" --misc.exclude-addr-prefix "/ip4/172.17"
 ```
 SN端目前测试版本只需要重新编译`YDTNMgmtJavaBinding`项目的`dev`分支并替换原有jar包即可
 
@@ -92,7 +94,6 @@ SN端目前测试版本只需要重新编译`YDTNMgmtJavaBinding`项目的`dev`�
 analysis服务需要将各SN所属mongoDB数据库的分块分片数据同步至analysis库，需使用![yotta-sync-server](https://github.com/yottachain/yotta-sync-server)项目进行数据同步。该项目会将全部SN的metabase库中的blocks和shards集合同步至analysis服务所接入mongoDB实例的metabase库，注意，在同步执行之前，需要为`shards`集合建立索引：
 ```
 mongoshell> db.shards.createIndex({nodeId:1, _id:1})
-mongoshell> db.shards.createIndex({blockid:1})
 ```
 除此之外还需要建立名称为`analysis`的分析库用于记录抽查过程中的数据，该库包含两个集合，分别为`SpotCheck`和`SpotCheckNode`，`SpotCheck`字段如下：
 | 字段 | 类型 | 描述 |
