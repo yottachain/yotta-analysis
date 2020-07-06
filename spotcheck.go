@@ -126,6 +126,10 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 		}
 		errCount := scNode.ErrorCount
 		if errCount > analyser.Params.PunishPhase3 {
+			_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+			if err != nil {
+				entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+			}
 			errCount = analyser.Params.PunishPhase3
 		}
 		if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
@@ -359,6 +363,10 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 
 func (analyser *Analyser) punish(msgType, minerID, count int32, needPunish bool) {
 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
+	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
+		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
+		return
+	}
 	entry.Infof("send PunishMessage of miner %d, message type %d, need punishment %v: %d", minerID, msgType, needPunish, count)
 	rule := make(map[int32]int32)
 	rule[analyser.Params.PunishPhase1] = analyser.Params.PunishPhase1Percent
