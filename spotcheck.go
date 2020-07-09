@@ -518,54 +518,54 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	var limit int64 = 1
 	opt := options.FindOptions{}
 	opt.Limit = &limit
-	if startTime == 0 {
-		opt.Sort = bson.M{"_id": 1}
-		firstShard := new(Shard)
-		cur0, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	opt.Sort = bson.M{"_id": 1}
+	firstShard := new(Shard)
+	cur0, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	if err != nil {
+		entry.WithError(err).Error("find first shard failed")
+		return "", fmt.Errorf("find first shard failed: %s", err.Error())
+	}
+	defer cur0.Close(context.Background())
+	if cur0.Next(context.Background()) {
+		err := cur0.Decode(firstShard)
 		if err != nil {
-			entry.WithError(err).Error("find first shard failed")
-			return "", fmt.Errorf("find first shard failed: %s", err.Error())
+			entry.WithError(err).Error("decoding first shard failed")
+			return "", fmt.Errorf("error when decoding first shard: %s", err.Error())
 		}
-		defer cur0.Close(context.Background())
-		if cur0.Next(context.Background()) {
-			err := cur0.Decode(firstShard)
-			if err != nil {
-				entry.WithError(err).Error("decoding first shard failed")
-				return "", fmt.Errorf("error when decoding first shard: %s", err.Error())
-			}
-			entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
-		} else {
-			entry.Error("cannot find first shard")
-			return "", fmt.Errorf("cannot find first shard")
-		}
-		start64 := Int64ToBytes(firstShard.ID)
-		startTime = int64(BytesToInt32(start64[0:4]))
-		// startTime = firstShard.ID.Timestamp().Unix()
+		entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
+	} else {
+		entry.Error("cannot find first shard")
+		return "", fmt.Errorf("cannot find first shard")
+	}
+	start64 := Int64ToBytes(firstShard.ID)
+	sTime := int64(BytesToInt32(start64[0:4]))
+	if sTime >= startTime {
+		startTime = sTime
 	}
 	entry.Debugf("start time of spotcheck time range is %d", startTime)
-	if endTime == 0 {
-		opt.Sort = bson.M{"_id": -1}
-		lastShard := new(Shard)
-		cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	opt.Sort = bson.M{"_id": -1}
+	lastShard := new(Shard)
+	cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	if err != nil {
+		entry.WithError(err).Error("find last shard failed")
+		return "", fmt.Errorf("find last shard failed: %s", err.Error())
+	}
+	defer cur1.Close(context.Background())
+	if cur1.Next(context.Background()) {
+		err := cur1.Decode(lastShard)
 		if err != nil {
-			entry.WithError(err).Error("find last shard failed")
-			return "", fmt.Errorf("find last shard failed: %s", err.Error())
+			entry.WithError(err).Error("decoding last shard failed")
+			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
 		}
-		defer cur1.Close(context.Background())
-		if cur1.Next(context.Background()) {
-			err := cur1.Decode(lastShard)
-			if err != nil {
-				entry.WithError(err).Error("decoding last shard failed")
-				return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
-			}
-			entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
-		} else {
-			entry.Error("cannot find last shard")
-			return "", fmt.Errorf("cannot find last shard")
-		}
-		end64 := Int64ToBytes(lastShard.ID)
-		endTime = int64(BytesToInt32(end64[0:4]))
-		// endTime := lastShard.ID.Timestamp().Unix()
+		entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
+	} else {
+		entry.Error("cannot find last shard")
+		return "", fmt.Errorf("cannot find last shard")
+	}
+	end64 := Int64ToBytes(lastShard.ID)
+	eTime := int64(BytesToInt32(end64[0:4]))
+	if eTime <= endTime || endTime == 0 {
+		endTime = eTime
 	}
 	entry.Debugf("end time of spotcheck time range is %d", endTime)
 	if startTime >= endTime {
