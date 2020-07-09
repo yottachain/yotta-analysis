@@ -32,7 +32,8 @@ misc:
   punish-phase2-percent: 10
   punish-phase3: 10080
   punish-phase3-percent: 50
-  spotcheck-skip-time: 0
+  spotcheck-start-time: 0
+  spotcheck-end-time: 0
   spotcheck-interval: 3
   spotcheck-connect-timeout: 30
   error-node-percent-threshold: 101
