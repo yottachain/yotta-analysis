@@ -578,7 +578,6 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	rand32 := rand.Uint32()
 	sel32 = append(sel32, Uint32ToBytes(rand32)...)
 	selectedID := BytesToInt64(sel32)
-	// selectedID := primitive.NewObjectIDFromTimestamp(time.Unix(selectedTime, 0))
 	selectedShard := new(Shard)
 	cur2, err := collection.Find(context.Background(), bson.M{"nodeId": id, "_id": bson.M{"$gte": selectedID}}, &opt)
 	if err != nil {
