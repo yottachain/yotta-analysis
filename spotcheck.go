@@ -513,7 +513,8 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	entry := log.WithFields(log.Fields{Function: "getRandomVNI", MinerID: id})
 	collection := analyser.analysisdbClient.Database(MetaDB).Collection(Shards)
-	startTime := analyser.Params.SpotCheckSkipTime
+	startTime := analyser.Params.SpotCheckStartTime
+	endTime := analyser.Params.SpotCheckEndTime
 	var limit int64 = 1
 	opt := options.FindOptions{}
 	opt.Limit = &limit
@@ -542,28 +543,30 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 		// startTime = firstShard.ID.Timestamp().Unix()
 	}
 	entry.Debugf("start time of spotcheck time range is %d", startTime)
-	opt.Sort = bson.M{"_id": -1}
-	lastShard := new(Shard)
-	cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
-	if err != nil {
-		entry.WithError(err).Error("find last shard failed")
-		return "", fmt.Errorf("find last shard failed: %s", err.Error())
-	}
-	defer cur1.Close(context.Background())
-	if cur1.Next(context.Background()) {
-		err := cur1.Decode(lastShard)
+	if endTime == 0 {
+		opt.Sort = bson.M{"_id": -1}
+		lastShard := new(Shard)
+		cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
 		if err != nil {
-			entry.WithError(err).Error("decoding last shard failed")
-			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
+			entry.WithError(err).Error("find last shard failed")
+			return "", fmt.Errorf("find last shard failed: %s", err.Error())
 		}
-		entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
-	} else {
-		entry.Error("cannot find last shard")
-		return "", fmt.Errorf("cannot find last shard")
+		defer cur1.Close(context.Background())
+		if cur1.Next(context.Background()) {
+			err := cur1.Decode(lastShard)
+			if err != nil {
+				entry.WithError(err).Error("decoding last shard failed")
+				return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
+			}
+			entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
+		} else {
+			entry.Error("cannot find last shard")
+			return "", fmt.Errorf("cannot find last shard")
+		}
+		end64 := Int64ToBytes(lastShard.ID)
+		endTime = int64(BytesToInt32(end64[0:4]))
+		// endTime := lastShard.ID.Timestamp().Unix()
 	}
-	end64 := Int64ToBytes(lastShard.ID)
-	endTime := int64(BytesToInt32(end64[0:4]))
-	// endTime := lastShard.ID.Timestamp().Unix()
 	entry.Debugf("end time of spotcheck time range is %d", endTime)
 	if startTime >= endTime {
 		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")

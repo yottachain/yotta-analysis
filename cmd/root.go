@@ -201,8 +201,10 @@ var (
 	DefaultMiscPunishPhase2Percent int32 = 10
 	//DefaultMiscPunishPhase3Percent default value of MiscPunishPhase3Percent
 	DefaultMiscPunishPhase3Percent int32 = 50
-	//DefaultMiscSpotCheckSkipTime default value of MiscSpotCheckSkipTime
-	DefaultMiscSpotCheckSkipTime int64 = 0
+	//DefaultMiscSpotCheckStartTime default value of MiscSpotCheckStartTime
+	DefaultMiscSpotCheckStartTime int64 = 0
+	//DefaultMiscSpotCheckEndTime default value of MiscSpotCheckEndTime
+	DefaultMiscSpotCheckEndTime int64 = 0
 	//DefaultMiscSpotCheckInterval default value of MiscSpotCheckInterval
 	DefaultMiscSpotCheckInterval int64 = 60
 	//DefaultMiscSpotCheckConnectTimeout default value of MiscSpotCheckConnectTimeout
@@ -272,8 +274,10 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.MiscPunishPhase2PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase2PercentField))
 	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase3PercentField, DefaultMiscPunishPhase3Percent, "Percentage of 3rd phase desposit punishing")
 	viper.BindPFlag(ytanalysis.MiscPunishPhase3PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase3PercentField))
-	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckSkipTimeField, DefaultMiscSpotCheckSkipTime, "Shards uploaded before this timestamp wil not be spotchecked")
-	viper.BindPFlag(ytanalysis.MiscSpotCheckSkipTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckSkipTimeField))
+	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckStartTimeField, DefaultMiscSpotCheckStartTime, "Shards uploaded before this timestamp wil not be spotchecked")
+	viper.BindPFlag(ytanalysis.MiscSpotCheckStartTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckStartTimeField))
+	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckEndTimeField, DefaultMiscSpotCheckEndTime, "Shards uploaded after this timestamp wil not be spotchecked")
+	viper.BindPFlag(ytanalysis.MiscSpotCheckEndTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckEndTimeField))
 	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckIntervalField, DefaultMiscSpotCheckInterval, "Each miner will be spotchecked in this interval")
 	viper.BindPFlag(ytanalysis.MiscSpotCheckIntervalField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckIntervalField))
 	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckConnectTimeoutField, DefaultMiscSpotCheckConnectTimeout, "Timeout of connecting to miner when spotchecking")

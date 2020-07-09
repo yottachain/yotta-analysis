@@ -56,8 +56,10 @@ const (
 	MiscPunishPhase3Field = "misc.punish-phase3"
 	//MiscPunishPhase3PercentField Field name of misc.punish-phase3-percent config
 	MiscPunishPhase3PercentField = "misc.punish-phase3-percent"
-	//MiscSpotCheckSkipTimeField Field name of misc.spotcheck-skip-time config
-	MiscSpotCheckSkipTimeField = "misc.spotcheck-skip-time"
+	//MiscSpotCheckStartTimeField Field name of misc.spotcheck-start-time config
+	MiscSpotCheckStartTimeField = "misc.spotcheck-start-time"
+	//MiscSpotCheckEndTimeField Field name of misc.spotcheck-end-time config
+	MiscSpotCheckEndTimeField = "misc.spotcheck-end-time"
 	//MiscSpotCheckIntervalField Field name of misc.spotcheck-interval config
 	MiscSpotCheckIntervalField = "misc.spotcheck-interval"
 	//MiscSpotCheckConnectTimeoutField Field name of misc.spotcheck-connect-timeout config
@@ -113,7 +115,8 @@ type MiscConfig struct {
 	PunishPhase2Percent         int32  `mapstructure:"punish-phase2-percent"`
 	PunishPhase3                int32  `mapstructure:"punish-phase3"`
 	PunishPhase3Percent         int32  `mapstructure:"punish-phase3-percent"`
-	SpotCheckSkipTime           int64  `mapstructure:"spotcheck-skip-time"`
+	SpotCheckStartTime          int64  `mapstructure:"spotcheck-start-time"`
+	SpotCheckEndTime            int64  `mapstructure:"spotcheck-end-time"`
 	SpotCheckInterval           int64  `mapstructure:"spotcheck-interval"`
 	SpotCheckConnectTimeout     int64  `mapstructure:"spotcheck-connect-timeout"`
 	ErrorNodePercentThreshold   int32  `mapstructure:"error-node-percent-threshold"`
