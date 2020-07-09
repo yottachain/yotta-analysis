@@ -11,8 +11,8 @@ import (
 	"time"
 
 	proto "github.com/golang/protobuf/proto"
+	"github.com/libp2p/go-libp2p-core/peer"
 	log "github.com/sirupsen/logrus"
-	pbh "github.com/yottachain/P2PHost/pb"
 	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -310,18 +310,34 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 
 //CheckVNI check whether vni is correct
 func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, error) {
+	// entry := log.WithFields(log.Fields{Function: "CheckVNI", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
+	// ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
+	// defer cancle()
+	// entry.Debugf("setting connect timeout to %d", analyser.Params.SpotCheckConnectTimeout)
+	// req := &pbh.ConnectReq{Id: node.NodeID, Addrs: node.Addrs}
+	// _, err := analyser.checker.lhost.Connect(ctx, req)
+	// if err != nil {
+	// 	entry.WithError(err).Error("connecting spotchecked miner failed")
+	// 	return false, err
+	// }
+
 	entry := log.WithFields(log.Fields{Function: "CheckVNI", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
 	ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
 	defer cancle()
 	entry.Debugf("setting connect timeout to %d", analyser.Params.SpotCheckConnectTimeout)
-	req := &pbh.ConnectReq{Id: node.NodeID, Addrs: node.Addrs}
-	_, err := analyser.checker.lhost.Connect(ctx, req)
+	ID, err := peer.Decode(node.NodeID)
+	if err != nil {
+		return false, err
+	}
+	maddrs, _ := stringListToMaddrs(node.Addrs)
+	_, err = analyser.checker.lhost.ClientStore().Get(ctx, ID, maddrs)
 	if err != nil {
 		entry.WithError(err).Error("connecting spotchecked miner failed")
 		return false, err
 	}
 	entry.Debug("spotchecked miner connected")
-	defer analyser.checker.lhost.DisConnect(context.Background(), &pbh.StringMsg{Value: node.NodeID})
+	//defer analyser.checker.lhost.DisConnect(context.Background(), &pbh.StringMsg{Value: node.NodeID})
+	defer analyser.checker.lhost.ClientStore().Close(ID)
 
 	rawvni, err := base64.StdEncoding.DecodeString(spr.VNI)
 	if err != nil {
