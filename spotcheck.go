@@ -515,6 +515,7 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")
 		return "", fmt.Errorf("no valid shards can be spotchecked")
 	}
+	opt.Sort = bson.M{"_id": 1}
 	delta := rand.Int63n(endTime - startTime)
 	selectedTime := startTime + delta
 	sel32 := Int32ToBytes(int32(selectedTime))
