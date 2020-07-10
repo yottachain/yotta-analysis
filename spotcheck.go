@@ -132,10 +132,12 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 			}
 			errCount = analyser.Params.PunishPhase3
 		}
-		if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
-			analyser.punish(0, node.ID, errCount, true)
-		} else {
-			analyser.punish(0, node.ID, errCount, false)
+		if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+			if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
+				analyser.punish(0, node.ID, errCount, true)
+			} else {
+				analyser.punish(0, node.ID, errCount, false)
+			}
 		}
 		entry.Debug("increasing error count of miner")
 		defer func() {
@@ -194,12 +196,29 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 					}()
 					return
 				}
+				errCount2 := scNode.ErrorCount
+				if errCount2 > analyser.Params.PunishPhase3 {
+					_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+					if err != nil {
+						entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+					}
+					errCount2 = analyser.Params.PunishPhase3
+				}
+				if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+					if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
+						analyser.punish(0, node.ID, errCount2, true)
+					} else {
+						analyser.punish(0, node.ID, errCount2, false)
+					}
+				}
 				entry.Debug("increasing error count of miner")
 				break
 			}
 			if !b {
 				errCount++
 				entry.Debugf("checking shard %d successful: %s", i, spr.VNI)
+			} else {
+				entry.Debugf("checking shard %d failed: %s", i, spr.VNI)
 			}
 		}
 		defer func() {
@@ -217,22 +236,6 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 				if analyser.Params.PunishPhase3Percent > 0 {
 					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
 						analyser.punish(2, node.ID, analyser.Params.PunishPhase3Percent, true)
-						// left, err := analyser.punish(node, int64(analyser.Params.PunishPhase3Percent))
-						// if err != nil {
-						// 	entry.WithError(err).Errorf("punishing %d%% deposit", analyser.Params.PunishPhase3Percent)
-						// } else if left == 0 {
-						// 	entry.Warn("no deposit can be punished")
-						// } else {
-						// 	entry.Infof("punished %d%% deposit", analyser.Params.PunishPhase3Percent)
-						// }
-						// defer func() {
-						// 	_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"status": 2}})
-						// 	if err != nil {
-						// 		entry.WithError(err).Error("updating task status to 2")
-						// 	} else {
-						// 		entry.Debug("task status is updated to 2")
-						// 	}
-						// }()
 					}
 				}
 			} else {
@@ -240,72 +243,12 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 				if analyser.Params.PunishPhase1Percent > 0 {
 					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
 						analyser.punish(1, node.ID, analyser.Params.PunishPhase1Percent, true)
-						// left, err := analyser.punish(node, int64(analyser.Params.PunishPhase1Percent))
-						// if err != nil {
-						// 	entry.WithError(err).Errorf("punishing %d%% deposit", analyser.Params.PunishPhase1Percent)
-						// } else if left == 0 {
-						// 	entry.Warn("no deposit can be punished")
-						// } else {
-						// 	entry.Infof("punished %d%% deposit", analyser.Params.PunishPhase1Percent)
-						// }
 					}
 				}
 			}
 			return
 		}
 	}
-
-	// if scNode.ErrorCount == analyser.Params.PunishPhase1 {
-	// 	entry.Infof("phase 1: miner is offline for %d times in spotchecking, punishing %d%% deposit", scNode.ErrorCount, analyser.Params.PunishPhase1Percent)
-	// 	if analyser.Params.PunishPhase1Percent > 0 {
-	// 		if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
-	// 			left, err := analyser.punish(node, int64(analyser.Params.PunishPhase1Percent))
-	// 			if err != nil {
-	// 				entry.WithError(err).Errorf("phase 1: punishing %d%% deposit", analyser.Params.PunishPhase1Percent)
-	// 			} else if left == 0 {
-	// 				entry.Warn("phase 1: no deposit can be punished")
-	// 			} else {
-	// 				entry.Infof("phase 1: punished %d%% deposit", analyser.Params.PunishPhase1Percent)
-	// 			}
-	// 		}
-	// 	}
-	// } else if scNode.ErrorCount == analyser.Params.PunishPhase2 {
-	// 	entry.Infof("phase 2: miner is offline for %d times in spotchecking, punishing %d%% deposit", scNode.ErrorCount, analyser.Params.PunishPhase2Percent)
-	// 	if analyser.Params.PunishPhase2Percent > 0 {
-	// 		if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
-	// 			left, err := analyser.punish(node, int64(analyser.Params.PunishPhase2Percent))
-	// 			if err != nil {
-	// 				entry.WithError(err).Errorf("phase 2: punishing %d%% deposit", analyser.Params.PunishPhase2Percent)
-	// 			} else if left == 0 {
-	// 				entry.Warn("phase 2: no deposit can be punished")
-	// 			} else {
-	// 				entry.Infof("phase 2: punished %d%% deposit", analyser.Params.PunishPhase2Percent)
-	// 			}
-	// 		}
-	// 	}
-	// } else if scNode.ErrorCount == analyser.Params.PunishPhase3 {
-	// 	entry.Infof("phase 3: miner is offline for %d times in spotchecking, punishing %d%% deposit", scNode.ErrorCount, analyser.Params.PunishPhase3Percent)
-	// 	if analyser.Params.PunishPhase3Percent > 0 {
-	// 		if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
-	// 			left, err := analyser.punish(node, int64(analyser.Params.PunishPhase3Percent))
-	// 			if err != nil {
-	// 				entry.WithError(err).Errorf("phase 3: punishing %d%% deposit", analyser.Params.PunishPhase3Percent)
-	// 			} else if left == 0 {
-	// 				entry.Warn("phase 3: no deposit can be punished")
-	// 			} else {
-	// 				entry.Infof("phase 3: punished %d%% deposit", analyser.Params.PunishPhase3Percent)
-	// 			}
-	// 			defer func() {
-	// 				_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"status": 2}})
-	// 				if err != nil {
-	// 					entry.WithError(err).Error("updating status of spotcheck miner to 2")
-	// 				} else {
-	// 					entry.Info("updated status of spotcheck miner to 2")
-	// 				}
-	// 			}()
-	// 		}
-	// 	}
-	// }
 }
 
 //CheckVNI check whether vni is correct
