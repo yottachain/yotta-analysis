@@ -288,6 +288,10 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 		entry.WithError(err).Error("sending rechecking command failed")
 		return false, err
 	}
+	if len(shardData) == 0 {
+		entry.WithError(err).Error("downloading shard response is empty")
+		return false, errors.New("downloading shard response is empty")
+	}
 	entry.Debug("rechecking command is sent to spotcheck miner")
 	var share pb.DownloadShardResponse
 	err = proto.Unmarshal(shardData[2:], &share)
