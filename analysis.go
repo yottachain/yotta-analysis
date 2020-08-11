@@ -53,18 +53,21 @@ func New(analysisDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyse
 		return nil, err
 	}
 	entry.Info("creating host successful")
+	pool := grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)
 	callback := func(msg *msg.Message) {
 		if msg.GetType() == auramq.BROADCAST {
 			if msg.GetDestination() == mqconf.MinerSyncTopic {
-				nodemsg := new(pb.NodeMsg)
-				err := proto.Unmarshal(msg.Content, nodemsg)
-				if err != nil {
-					entry.WithError(err).Error("decoding nodeMsg failed")
-					return
+				pool.JobQueue <- func() {
+					nodemsg := new(pb.NodeMsg)
+					err := proto.Unmarshal(msg.Content, nodemsg)
+					if err != nil {
+						entry.WithError(err).Error("decoding nodeMsg failed")
+						return
+					}
+					node := new(Node)
+					node.Fillby(nodemsg)
+					syncNode(analysisdbClient, node, conf.ExcludeAddrPrefix)
 				}
-				node := new(Node)
-				node.Fillby(nodemsg)
-				syncNode(analysisdbClient, node, conf.ExcludeAddrPrefix)
 			}
 		}
 	}
