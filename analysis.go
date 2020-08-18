@@ -53,18 +53,21 @@ func New(analysisDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyse
 		return nil, err
 	}
 	entry.Info("creating host successful")
+	pool := grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)
 	callback := func(msg *msg.Message) {
 		if msg.GetType() == auramq.BROADCAST {
 			if msg.GetDestination() == mqconf.MinerSyncTopic {
-				nodemsg := new(pb.NodeMsg)
-				err := proto.Unmarshal(msg.Content, nodemsg)
-				if err != nil {
-					entry.WithError(err).Error("decoding nodeMsg failed")
-					return
+				pool.JobQueue <- func() {
+					nodemsg := new(pb.NodeMsg)
+					err := proto.Unmarshal(msg.Content, nodemsg)
+					if err != nil {
+						entry.WithError(err).Error("decoding nodeMsg failed")
+						return
+					}
+					node := new(Node)
+					node.Fillby(nodemsg)
+					syncNode(analysisdbClient, node, conf.ExcludeAddrPrefix)
 				}
-				node := new(Node)
-				node.Fillby(nodemsg)
-				syncNode(analysisdbClient, node, conf.ExcludeAddrPrefix)
 			}
 		}
 	}
@@ -97,42 +100,74 @@ func syncNode(cli *mongo.Client, node *Node, excludeAddrPrefix string) error {
 	if node.Uspaces == nil {
 		node.Uspaces = make(map[string]int64)
 	}
-	_, err := collection.InsertOne(context.Background(), bson.M{"_id": node.ID, "nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "uspaces": node.Uspaces, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc})
+
+	cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
+	for k, v := range node.Uspaces {
+		cond[fmt.Sprintf("uspaces.%s", k)] = v
+	}
+	opts := new(options.FindOneAndUpdateOptions)
+	opts = opts.SetReturnDocument(options.Before)
+	result := collection.FindOneAndUpdate(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
+	oldNode := new(Node)
+	err := result.Decode(oldNode)
 	if err != nil {
-		errstr := err.Error()
-		if !strings.ContainsAny(errstr, "duplicate key error") {
-			entry.WithError(err).Warnf("inserting node %d to database", node.ID)
-			return err
-		}
-		oldNode := new(Node)
-		err := collection.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(oldNode)
-		if err != nil {
-			entry.WithError(err).Warnf("fetching node %d failed", node.ID)
-			return err
-		}
-		cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
-		for k, v := range node.Uspaces {
-			cond[fmt.Sprintf("uspaces.%s", k)] = v
-		}
-		opts := new(options.FindOneAndUpdateOptions)
-		opts = opts.SetReturnDocument(options.After)
-		result := collection.FindOneAndUpdate(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
-		updatedNode := new(Node)
-		err = result.Decode(updatedNode)
-		if err != nil {
-			entry.WithError(err).Warnf("updating record of node %d", node.ID)
-			return err
-		}
-		if oldNode.Status != updatedNode.Status {
-			collectionSN := cli.Database(AnalysisDB).Collection(SpotCheckNodeTab)
-			_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": bson.M{"status": updatedNode.Status}})
+		if err == mongo.ErrNoDocuments {
+			_, err := collection.InsertOne(context.Background(), bson.M{"_id": node.ID, "nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "uspaces": node.Uspaces, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc})
 			if err != nil {
-				entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
+				entry.WithError(err).Warnf("inserting node %d to database", node.ID)
 				return err
 			}
+			return nil
+		}
+		entry.WithError(err).Warnf("updating record of node %d", node.ID)
+		return err
+	}
+	if oldNode.Status != node.Status {
+		collectionSN := cli.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+		_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": bson.M{"status": node.Status}})
+		if err != nil {
+			entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
+			return err
 		}
 	}
 	return nil
+
+	// _, err := collection.InsertOne(context.Background(), bson.M{"_id": node.ID, "nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "uspaces": node.Uspaces, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc})
+	// if err != nil {
+	// 	errstr := err.Error()
+	// 	if !strings.ContainsAny(errstr, "duplicate key error") {
+	// 		entry.WithError(err).Warnf("inserting node %d to database", node.ID)
+	// 		return err
+	// 	}
+	// 	oldNode := new(Node)
+	// 	err := collection.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(oldNode)
+	// 	if err != nil {
+	// 		entry.WithError(err).Warnf("fetching node %d failed", node.ID)
+	// 		return err
+	// 	}
+	// 	cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
+	// 	for k, v := range node.Uspaces {
+	// 		cond[fmt.Sprintf("uspaces.%s", k)] = v
+	// 	}
+	// 	opts := new(options.FindOneAndUpdateOptions)
+	// 	opts = opts.SetReturnDocument(options.After)
+	// 	result := collection.FindOneAndUpdate(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
+	// 	updatedNode := new(Node)
+	// 	err = result.Decode(updatedNode)
+	// 	if err != nil {
+	// 		entry.WithError(err).Warnf("updating record of node %d", node.ID)
+	// 		return err
+	// 	}
+	// 	if oldNode.Status != updatedNode.Status {
+	// 		collectionSN := cli.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	// 		_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": bson.M{"status": updatedNode.Status}})
+	// 		if err != nil {
+	// 			entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
+	// 			return err
+	// 		}
+	// 	}
+	// }
+	// return nil
 }
 
 func checkPublicAddrs(addrs []string, excludeAddrPrefix string) []string {

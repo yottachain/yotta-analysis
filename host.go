@@ -1,39 +1,62 @@
 package ytanalysis
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"fmt"
 
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/mr-tron/base58"
 	ma "github.com/multiformats/go-multiaddr"
-	server "github.com/yottachain/P2PHost"
-	pb "github.com/yottachain/P2PHost/pb"
 	ytcrypto "github.com/yottachain/YTCrypto"
+	host "github.com/yottachain/YTHost"
+	hst "github.com/yottachain/YTHost/interface"
+	"github.com/yottachain/YTHost/option"
 )
 
 //Host p2p host
 type Host struct {
-	lhost *server.Server
+	lhost hst.Host
 }
 
 //NewHost create a new host
 func NewHost() (*Host, error) {
 	sk, _ := ytcrypto.CreateKey()
-	host, err := server.NewServer("0", sk)
+	ma, _ := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", 0))
+	privbytes, err := base58.Decode(sk)
 	if err != nil {
 		return nil, err
 	}
-	return &Host{lhost: host}, nil
+	pk, err := crypto.UnmarshalSecp256k1PrivateKey(privbytes[1:33])
+	if err != nil {
+		return nil, err
+	}
+	lhost, err := host.NewHost(option.ListenAddr(ma), option.Identity(pk))
+	if err != nil {
+		return nil, err
+	}
+	go lhost.Accept()
+	return &Host{lhost: lhost}, nil
 }
 
 //SendMsg send a message to client
 func (host *Host) SendMsg(ctx context.Context, id string, msg []byte) ([]byte, error) {
-	sendMsgReq := &pb.SendMsgReq{Id: id, Msgid: msg[0:2], Msg: msg[2:]}
-	// ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(1000))
-	// defer cancle()
-	sendMsgResp, err := host.lhost.SendMsg(ctx, sendMsgReq)
+	msid := msg[0:2]
+	bytebuff := bytes.NewBuffer(msid)
+	var tmp uint16
+	err := binary.Read(bytebuff, binary.BigEndian, &tmp)
+	msgID := int32(tmp)
+	ID, err := peer.Decode(id)
 	if err != nil {
 		return nil, err
 	}
-	return sendMsgResp.Value, nil
+	bytes, err := host.lhost.SendMsg(ctx, ID, msgID, msg[2:])
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
 }
 
 func stringListToMaddrs(addrs []string) ([]ma.Multiaddr, error) {

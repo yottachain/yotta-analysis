@@ -20,8 +20,8 @@ require (
 	github.com/subchen/go-trylock/v2 v2.0.0
 	github.com/tebeka/strftime v0.1.4 // indirect
 	github.com/tidwall/pretty v1.0.1 // indirect
-	github.com/yottachain/P2PHost v1.0.1-0.20200330065720-69572fdc7d92
 	github.com/yottachain/YTCrypto v0.0.0-20200122165219-0ea35dc29812
+	github.com/yottachain/YTHost v1.0.2-0.20200703084155-b2658f82b387
 	go.mongodb.org/mongo-driver v1.3.3
 	google.golang.org/grpc v1.26.0
 )
