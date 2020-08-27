@@ -30,6 +30,8 @@ type Analyser struct {
 	Params *MiscConfig
 	pool   *grpool.Pool
 	mqClis map[int]*ytsync.Service
+	c      int64
+	d      int64
 }
 
 //New create new analyser instance
@@ -77,6 +79,11 @@ func New(analysisDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyse
 		return nil, err
 	}
 	analyser := &Analyser{analysisdbClient: analysisdbClient, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength), mqClis: m}
+	err = analyser.calculateCD()
+	if err != nil {
+		entry.WithError(err).Error("calculate c & d failed")
+		return nil, err
+	}
 	return analyser, nil
 }
 
