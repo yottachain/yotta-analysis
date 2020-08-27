@@ -729,8 +729,8 @@ func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	// 	return false, errors.New("error when get count of spotcheck-executing miners")
 	// }
 	// entry.Debugf("count of spotcheck-executing miners is %d", d)
-	c := analyser.c
-	d := analyser.d
+	c := atomic.LoadInt64(&analyser.c)
+	d := atomic.LoadInt64(&analyser.d)
 	if c == 0 || d == 0 {
 		entry.Warn("count of spotcheckable miners or count of spotcheck-executing miners is 0")
 		return false, nil
