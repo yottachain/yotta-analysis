@@ -397,6 +397,12 @@ func (analyser *Analyser) punish(msgType, minerID, count int32, needPunish bool)
 //UpdateTaskStatus process error task of spotchecking
 func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) error {
 	entry := log.WithFields(log.Fields{Function: "UpdateTaskStatus", TaskID: taskID, MinerID: invalidNode})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 
@@ -405,6 +411,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	opts = opts.SetReturnDocument(options.After)
 	sprn := new(SpotCheckRecord)
 	err := collectionS.FindOneAndUpdate(context.Background(), bson.M{"_id": taskID}, bson.M{"$inc": bson.M{"dup": 1}}, opts).Decode(sprn)
+	entry.Debugf("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("increasing dup")
 		return err
@@ -421,6 +428,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	opt.Sort = bson.M{"timestamp": -1}
 	opt.Limit = &limit
 	cur, err := collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("fetching lastest spotcheck task")
 		return err
@@ -450,6 +458,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	opt.Limit = &limit
 	opt.Skip = &skip
 	cur, err = collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("fetching last spotcheck task")
 		return err
@@ -464,6 +473,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 		entry.Debug("last spotcheck task fetched")
 		if lastSpotCheck.Status == 0 {
 			_, err = collectionSN.UpdateOne(context.Background(), bson.M{"_id": invalidNode}, bson.M{"$set": bson.M{"errorCount": 0}})
+			entry.Debugf("<time trace %d>cost time 4: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 			if err != nil {
 				entry.WithError(err).Error("updating error count to 0")
 				return err
@@ -473,6 +483,7 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	}
 	//update task status to 1(rechecking)
 	_, err = collectionS.UpdateOne(context.Background(), bson.M{"_id": taskID}, bson.M{"$set": bson.M{"status": 1}})
+	entry.Debugf("<time trace %d>cost time 5: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("updating status of spotcheck task to 1")
 		return err
@@ -483,12 +494,19 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	analyser.pool.JobQueue <- func() {
 		analyser.checkDataNode(lastestSpotCheck)
 	}
+	entry.Debugf("<time trace %d>cost time 6: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	return nil
 }
 
 //getRandomVNI find one VNI by miner ID and index of shards table
 func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	entry := log.WithFields(log.Fields{Function: "getRandomVNI", MinerID: id})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	collection := analyser.analysisdbClient.Database(MetaDB).Collection(Shards)
 	startTime := analyser.Params.SpotCheckStartTime
 	endTime := analyser.Params.SpotCheckEndTime
@@ -498,6 +516,7 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	opt.Sort = bson.M{"_id": 1}
 	firstShard := new(Shard)
 	cur0, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	entry.Debugf("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("find first shard failed")
 		return "", fmt.Errorf("find first shard failed: %s", err.Error())
@@ -523,6 +542,7 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	opt.Sort = bson.M{"_id": -1}
 	lastShard := new(Shard)
 	cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
+	entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("find last shard failed")
 		return "", fmt.Errorf("find last shard failed: %s", err.Error())
@@ -558,6 +578,7 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 	selectedID := BytesToInt64(sel32)
 	selectedShard := new(Shard)
 	cur2, err := collection.Find(context.Background(), bson.M{"nodeId": id, "_id": bson.M{"$gte": selectedID}}, &opt)
+	entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("finding random shard")
 		return "", fmt.Errorf("find random shard failed: %s", err.Error())
@@ -580,6 +601,12 @@ func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
 //GetSpotCheckList creates a spotcheck task
 func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 	entry := log.WithFields(log.Fields{Function: "GetSpotCheckList"})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	for range [10]byte{} {
@@ -590,6 +617,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		collectionN := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 
 		total, err := collectionN.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
+		entry.Debugf("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Error("calculating total count of spotcheckable miners")
 			continue
@@ -606,6 +634,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		optionf.Limit = &limit
 		optionf.Skip = &skip
 		cur, err := collectionN.Find(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
+		entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("finding random miner for spotchecking")
 			continue
@@ -625,6 +654,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		//check spotcheck node
 		scNode := new(Node)
 		err = collectionSN.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(scNode)
+		entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err == nil && scNode.Status == 2 {
 			entry.Warnf("miner %d is under rebuilding", scNode.ID)
 			continue
@@ -635,6 +665,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		optionf.Sort = bson.M{"timestamp": -1}
 		optionf.Limit = &limit
 		cur, err = collectionS.Find(context.Background(), bson.M{"nid": node.ID}, optionf)
+		entry.Debugf("<time trace %d>cost time 4: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("fetching lastest spotcheck task of miner %d", node.ID)
 			continue
@@ -667,6 +698,7 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		}
 		entry.Debugf("selecting random shard of miner %d", node.ID)
 		spotCheckTask.VNI, err = analyser.getRandomVNI(node.ID)
+		entry.Debugf("<time trace %d>cost time 5: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("selecting random shard of miner %d", node.ID)
 			continue
@@ -678,12 +710,14 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 
 		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp, Dup: 0}
 		_, err = collectionS.InsertOne(context.Background(), spr)
+		entry.Debugf("<time trace %d>cost time 6: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("inserting spotcheck record of miner %d", node.ID)
 			continue
 		}
 		node.ErrorCount = 0
 		_, err = collectionSN.InsertOne(context.Background(), node)
+		entry.Debugf("<time trace %d>cost time 7: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			errstr := err.Error()
 			if !strings.ContainsAny(errstr, "duplicate key error") {
@@ -700,6 +734,12 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 //IsNodeSelected check if node is selected for spotchecking
 func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	entry := log.WithFields(log.Fields{Function: "IsNodeSelected"})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	// collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	// c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
 	// if err != nil {
