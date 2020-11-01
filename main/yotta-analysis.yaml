@@ -1,5 +1,6 @@
 bind-addr: ":8080"
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+syncdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
 auramq:
   subscriber-buffer-size: 1024
   ping-wait: 30

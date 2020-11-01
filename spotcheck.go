@@ -25,25 +25,25 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (analyser *Analyser) calculateCD() error {
-	entry := log.WithFields(log.Fields{Function: "CalculateCD"})
-	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	if err != nil {
-		entry.WithError(err).Error("calculating count of spotcheckable miners")
-		return errors.New("error when get count of spotcheckable miners")
-	}
-	atomic.StoreInt64(&analyser.c, c)
-	entry.Debugf("count of spotcheckable miners is %d", c)
-	d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	if err != nil {
-		entry.WithError(err).Error("calculating count of spotcheck-executing miners")
-		return errors.New("error when get count of spotcheck-executing miners")
-	}
-	atomic.StoreInt64(&analyser.d, d)
-	entry.Debugf("count of spotcheck-executing miners is %d", d)
-	return nil
-}
+// func (analyser *Analyser) calculateCD() error {
+// 	entry := log.WithFields(log.Fields{Function: "CalculateCD"})
+// 	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
+// 	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
+// 	if err != nil {
+// 		entry.WithError(err).Error("calculating count of spotcheckable miners")
+// 		return errors.New("error when get count of spotcheckable miners")
+// 	}
+// 	atomic.StoreInt64(&analyser.c, c)
+// 	entry.Debugf("count of spotcheckable miners is %d", c)
+// 	d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
+// 	if err != nil {
+// 		entry.WithError(err).Error("calculating count of spotcheck-executing miners")
+// 		return errors.New("error when get count of spotcheck-executing miners")
+// 	}
+// 	atomic.StoreInt64(&analyser.d, d)
+// 	entry.Debugf("count of spotcheck-executing miners is %d", d)
+// 	return nil
+// }
 
 //StartRecheck starting recheck process
 func (analyser *Analyser) StartRecheck() {
@@ -68,15 +68,15 @@ func (analyser *Analyser) StartRecheck() {
 			entry.Debug("deleted expired spotcheck tasks")
 		}
 	}()
-	go func() {
-		for {
-			err := analyser.calculateCD()
-			if err != nil {
-				entry.Warnf("calculate c & d failed")
-			}
-			time.Sleep(time.Duration(3) * time.Minute)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		err := analyser.calculateCD()
+	// 		if err != nil {
+	// 			entry.Warnf("calculate c & d failed")
+	// 		}
+	// 		time.Sleep(time.Duration(3) * time.Minute)
+	// 	}
+	// }()
 }
 
 func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
@@ -169,7 +169,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 				analyser.punish(0, node.ID, errCount, false)
 			}
 		}
-		entry.Debug("increasing error count of miner")
+		entry.Debugf("increasing error count of miner: %d", errCount)
 		defer func() {
 			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
 			if err != nil {
@@ -241,7 +241,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 						analyser.punish(0, node.ID, errCount2, false)
 					}
 				}
-				entry.Debug("increasing error count of miner")
+				entry.Debugf("increasing error count of miner: %d", errCount2)
 				break
 			}
 			if !b {
@@ -355,8 +355,8 @@ func (analyser *Analyser) punish(msgType, minerID, count int32, needPunish bool)
 		entry.WithError(err).Error("marshaling PunishMessage failed")
 		return
 	}
-	snID := int(minerID) % len(analyser.mqClis)
-	ret := analyser.mqClis[snID].Send(fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
+	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
+	ret := analyser.nodeMgr.MqClis[snID].Send(fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
 	if !ret {
 		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
 	}
@@ -734,27 +734,8 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 //IsNodeSelected check if node is selected for spotchecking
 func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	entry := log.WithFields(log.Fields{Function: "IsNodeSelected"})
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	randtag := r.Int31()
-	st := time.Now().UnixNano()
-	defer func() {
-		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-	}()
-	// collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	// c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	// if err != nil {
-	// 	entry.WithError(err).Error("calculating count of spotcheckable miners")
-	// 	return false, errors.New("error when get count of spotcheckable miners")
-	// }
-	// entry.Debugf("count of spotcheckable miners is %d", c)
-	// d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	// if err != nil {
-	// 	entry.WithError(err).Error("calculating count of spotcheck-executing miners")
-	// 	return false, errors.New("error when get count of spotcheck-executing miners")
-	// }
-	// entry.Debugf("count of spotcheck-executing miners is %d", d)
-	c := atomic.LoadInt64(&analyser.c)
-	d := atomic.LoadInt64(&analyser.d)
+	c := atomic.LoadInt64(&analyser.nodeMgr.c)
+	d := atomic.LoadInt64(&analyser.nodeMgr.d)
 	if c == 0 || d == 0 {
 		entry.Warn("count of spotcheckable miners or count of spotcheck-executing miners is 0")
 		return false, nil

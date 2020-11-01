@@ -5,6 +5,8 @@ const (
 	BindAddrField = "bind-addr"
 	//AnalysisDBURLField Field name of analysisdb-url config
 	AnalysisDBURLField = "analysisdb-url"
+	//SyncDBURLField Field name of syncdb-url config
+	SyncDBURLField = "syncdb-url"
 
 	//AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
 	AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
@@ -76,6 +78,7 @@ const (
 type Config struct {
 	BindAddr      string        `mapstructure:"bind-addr"`
 	AnalysisDBURL string        `mapstructure:"analysisdb-url"`
+	SyncDBURL     string        `mapstructure:"syncdb-url"`
 	AuraMQ        *AuraMQConfig `mapstructure:"auramq"`
 	Logger        *LogConfig    `mapstructure:"logger"`
 	MiscConfig    *MiscConfig   `mapstructure:"misc"`

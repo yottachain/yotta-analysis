@@ -36,7 +36,7 @@ var rootCmd = &cobra.Command{
 		// 	panic("count of mongoDB URL is not equal to SN count\n")
 		// }
 		initLog(config)
-		analyser, err := ytanalysis.New(config.AnalysisDBURL, config.AuraMQ, config.MiscConfig)
+		analyser, err := ytanalysis.New(config.AnalysisDBURL, config.SyncDBURL, config.AuraMQ, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
@@ -150,6 +150,8 @@ var (
 	DefaultBindAddr string = ":8080"
 	//DefaultAnalysisDBURL default value of AnalysisDBURL
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
+	//DefaultSyncDBURL default value of SyncDBURL
+	DefaultSyncDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
 
 	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
 	DefaultAuramqSubscriberBufferSize = 1024
@@ -223,6 +225,8 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.BindAddrField, rootCmd.PersistentFlags().Lookup(ytanalysis.BindAddrField))
 	rootCmd.PersistentFlags().String(ytanalysis.AnalysisDBURLField, DefaultAnalysisDBURL, "mongoDB URL of analysis database")
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
+	rootCmd.PersistentFlags().String(ytanalysis.SyncDBURLField, DefaultSyncDBURL, "mongoDB URL of sync database")
+	viper.BindPFlag(ytanalysis.SyncDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.SyncDBURLField))
 	//AuraMQ config
 	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
 	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))

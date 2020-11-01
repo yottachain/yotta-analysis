@@ -10,6 +10,8 @@ $ go build -o analysis
 bind-addr: ":8080"
 #分析库的URL地址，默认为mongodb://127.0.0.1:27017/?connect=direct
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+#同步库的URL地址，默认为mongodb://127.0.0.1:27017/?connect=direct
+syncdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
 #消息队列相关配置
 auramq:
   #本地订阅者接收队列长度，默认值1024
@@ -88,7 +90,7 @@ $ nohup ./analysis &
 ```
 如果不想使用配置文件也可以通过命令行标志来设置参数，标志指定的值也可以覆盖掉配置文件中对应的属性：
 ```
-$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --auramq.subscriber-buffer-size "1024" --auramq.ping-wait "30" --auramq.read-wait "60" --auramq.write-wait "10" --auramq.miner-sync-topic "sync" --auramq.all-sn-urls "ws://172.17.0.2:8787/ws,ws://172.17.0.3:8787/ws,ws://172.17.0.4:8787/ws" --auramq.account "yottanalysis" --auramq.private-key "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7" --auramq.client-id "yottaanalysis" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-start-time "0" --misc.spotcheck-end-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.pool-error-miner-time-threshold "14400" --misc.exclude-addr-prefix "/ip4/172.17"
+$ ./analysis --bind-addr ":8080" --analysisdb-url "mongodb://127.0.0.1:27017/?connect=direct" --syncdb-url "mongodb://127.0.0.1:27017/?connect=direct" --auramq.subscriber-buffer-size "1024" --auramq.ping-wait "30" --auramq.read-wait "60" --auramq.write-wait "10" --auramq.miner-sync-topic "sync" --auramq.all-sn-urls "ws://172.17.0.2:8787/ws,ws://172.17.0.3:8787/ws,ws://172.17.0.4:8787/ws" --auramq.account "yottanalysis" --auramq.private-key "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7" --auramq.client-id "yottaanalysis" --logger.output "file" --logger.file-path "./spotcheck.log" --logger.rotation-time "24" --logger.max-age "240" --logger.level "Info" --misc.reckecking-pool-length "5000" --misc.reckecking-queue-length "10000" --misc.avaliable-node-time-gap "3" --misc.miner-version-threshold "0" --misc.punish-phase1 "4" --misc.punish-phase2 "24" --misc.punish-phase3 "168" --misc.punish-phase1-percent "1" --misc.punish-phase2-percent "10" --misc.punish-phase3-percent "50" --misc.spotcheck-start-time "0" --misc.spotcheck-end-time "0" --misc.spotcheck-interval "60" --misc.spotcheck-connect-timeout "10" --misc.error-node-percent-threshold "95" --misc.pool-error-miner-time-threshold "14400" --misc.exclude-addr-prefix "/ip4/172.17"
 ```
 SN端目前测试版本只需要重新编译`YDTNMgmtJavaBinding`项目的`dev`分支并替换原有jar包即可
 

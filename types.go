@@ -1,6 +1,8 @@
 package ytanalysis
 
 import (
+	"sync"
+
 	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -84,6 +86,14 @@ type Node struct {
 	Ext string `bson:"-"`
 	//ErrorCount
 	ErrorCount int32 `bson:"errorCount"`
+	//Skip
+	Skip bool `bson:"skip"`
+	//FirstShard
+	FirstShard int64 `bson:"firstShard"`
+	//Processing
+	Processing bool `bson:"-"`
+	//Lock
+	Lock sync.RWMutex `bson:"-"`
 }
 
 //NewNode create a node struct
@@ -160,7 +170,7 @@ type VNI struct {
 	VNI []byte `bson:"vni"`
 }
 
-//Shards shard struct
+//Shard shard struct
 type Shard struct {
 	ID      int64            `bson:"_id"`
 	BlockID int64            `bson:"blockId"`
