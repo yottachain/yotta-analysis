@@ -56,10 +56,9 @@ func (taskMgr *TaskManager) FirstShard(ctx context.Context, minerID int32) (int6
 		}
 		entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
 		return firstShard.ID, nil
-	} else {
-		entry.Error("cannot find first shard")
-		return -1, fmt.Errorf("cannot find first shard")
 	}
+	entry.Error("cannot find first shard")
+	return -1, fmt.Errorf("cannot find first shard")
 }
 
 //randomVNI get a random VNI from one miner
@@ -144,9 +143,9 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 
 //SpotCheckItem Spotcheck item
 type SpotCheckItem struct {
-	MinerID     int32
-	CheckShard  string
-	ExtraShards []string
+	MinerID     int32    `bson:"nid"`
+	CheckShard  string   `bson:"checkShard"`
+	ExtraShards []string `bson:"extraShards"`
 }
 
 //ErrNoShardForSpotCheck throws when no shards found
@@ -191,3 +190,19 @@ func (taskMgr *TaskManager) GetSpotCheckItem(ctx context.Context, node *Node) (*
 	entry.Debugf("create spotcheck item cost %dms", (time.Now().UnixNano()-start)/1000000)
 	return &SpotCheckItem{MinerID: node.ID, CheckShard: checkShard, ExtraShards: extraShards}, nil
 }
+
+//InsertSpotCheckItem insert spotcheck item to database
+// func (taskMgr *TaskManager) InsertSpotCheckItem(ctx context.Context, item *SpotCheckItem) error {
+// 	entry := log.WithFields(log.Fields{Function: "InsertSpotCheckItem", MinerID: item.MinerID})
+// 	collection := taskMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckItemTab)
+// 	opts := new(options.UpdateOptions)
+// 	upsert := true
+// 	opts.Upsert = &upsert
+// 	cond := bson.M{"checkShard": item.CheckShard, "extraShards": item.ExtraShards}
+// 	_, err := collection.UpdateOne(context.Background(), bson.M{"_id": item.MinerID}, bson.M{"$set": cond}, opts)
+// 	if err != nil {
+// 		entry.WithError(err).Error("insert spotcheck item")
+// 		return err
+// 	}
+// 	return nil
+// }

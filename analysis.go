@@ -26,22 +26,21 @@ type Analyser struct {
 }
 
 //New create new analyser instance
-func New(analysisDBURL, syncDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
-	analysisdbClient, err := mongo.Connect(context.Background(), options.Client().ApplyURI(analysisDBURL))
+	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
 		entry.WithError(err).Errorf("creating analysisDB client failed: %s", analysisDBURL)
 		return nil, err
 	}
-	syncdbClient, err := mongo.Connect(context.Background(), options.Client().ApplyURI(syncDBURL))
+	syncdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(syncDBURL))
 	if err != nil {
 		entry.WithError(err).Errorf("creating syncDB client failed: %s", syncDBURL)
 		return nil, err
 	}
 	entry.Infof("created syncDB client: %s", analysisDBURL)
 	taskManager := NewTaskManager(analysisdbClient, syncdbClient, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
-	ctx := context.Background()
-	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.ExcludeAddrPrefix)
+	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)
 	if err != nil {
 		entry.WithError(err).Error("creating node manager failed")
 		return nil, err

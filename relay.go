@@ -24,6 +24,7 @@ func GetRelayURL(addrs []string) string {
 
 //CheckPublicAddr check if public address exists
 func (analyser *Analyser) CheckPublicAddr(addrs []string) string {
+	ret := ""
 	for _, addr := range addrs {
 		if strings.HasPrefix(addr, "/ip4/127.") ||
 			strings.HasPrefix(addr, "/ip4/192.168.") ||
@@ -49,12 +50,12 @@ func (analyser *Analyser) CheckPublicAddr(addrs []string) string {
 			strings.HasPrefix(addr, "/p2p-circuit/") ||
 			strings.Index(addr, "/p2p/") != -1 {
 			if analyser.Params.ExcludeAddrPrefix != "" && strings.HasPrefix(addr, analyser.Params.ExcludeAddrPrefix) {
-				return addr
+				ret = addr
 			}
 			continue
 		} else {
-			return addr
+			ret = addr
 		}
 	}
-	return ""
+	return ret
 }

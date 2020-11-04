@@ -34,11 +34,12 @@ type NodeManager struct {
 	d                     int64
 	minerVersionThreshold int
 	avaliableNodeTimeGap  int
+	spotCheckInterval     int
 	rwlock                *sync.RWMutex
 }
 
 //NewNodeManager create new node manager
-func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskManager, mqconf *AuraMQConfig, poolLength, queueLength int, minerVersionThreshold int32, avaliableNodeTimeGap int64, excludeAddrPrefix string) (*NodeManager, error) {
+func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskManager, mqconf *AuraMQConfig, poolLength, queueLength int, minerVersionThreshold int32, avaliableNodeTimeGap int64, spotCheckInterval int64, excludeAddrPrefix string) (*NodeManager, error) {
 	entry := log.WithFields(log.Fields{Function: "NewNodeManager"})
 	nodeMgr := new(NodeManager)
 	nodeMgr.analysisdbClient = cli
@@ -49,6 +50,7 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 	nodeMgr.rwlock = new(sync.RWMutex)
 	nodeMgr.minerVersionThreshold = int(minerVersionThreshold)
 	nodeMgr.avaliableNodeTimeGap = int(avaliableNodeTimeGap)
+	nodeMgr.spotCheckInterval = int(spotCheckInterval)
 	collection := cli.Database(AnalysisDB).Collection(NodeTab)
 	cur, err := collection.Find(ctx, bson.M{"status": 1})
 	if err != nil {
@@ -92,16 +94,11 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 					}
 					node := new(Node)
 					node.Fillby(nodemsg)
-					err = nodeMgr.syncNode(node, excludeAddrPrefix)
+					err = nodeMgr.syncNode(ctx, node, excludeAddrPrefix)
 					if err != nil {
 						entry.WithError(err).Errorf("sync node %d", node.ID)
 					} else {
 						nodeMgr.UpdateNode(ctx, node)
-						// if node.Status == 1 && node.UsedSpace > 0 && int(node.Version) >= nodeMgr.minerVersionThreshold {
-						// 	nodeMgr.UpdateNode(ctx, node)
-						// } else {
-						// 	nodeMgr.MarkDeleteNode(node)
-						// }
 					}
 				}
 			}
@@ -113,38 +110,96 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 		return nil, err
 	}
 	nodeMgr.MqClis = m
-	err = nodeMgr.calculateCD()
+	err = nodeMgr.calculateCD(ctx)
 	if err != nil {
 		entry.WithError(err).Error("calculate c and d failed")
 		return nil, err
 	}
 	go func() {
 		for {
-			err := nodeMgr.calculateCD()
+			err := nodeMgr.calculateCD(ctx)
 			if err != nil {
 				entry.WithError(err).Warn("calculate c and d failed")
 			}
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Minute * 3)
 		}
 	}()
 	return nodeMgr, nil
 }
 
 //GetSpotCheckTask get spotcgeck task
-func (nodeMgr *NodeManager) GetSpotCheckTask(ctx context.Context) (*Node, SpotCheckItem, error) {
-	for i := 0; i < 10; i++ {
-		id := nodeMgr.SelectableNodes.RandomDelete()
-		entry := log.WithFields(log.Fields{Function: "GetSpotCheckTask", MinerID: id})
-		node := nodeMgr.Nodes[id]
-		if node == nil {
-			entry.Debugf("cannot find miner")
-			continue
-		}
-		node.Lock.Lock()
-		if node.Processing {
+func (nodeMgr *NodeManager) GetSpotCheckTask(ctx context.Context) (*Node, *SpotCheckItem, error) {
+	// entry := log.WithFields(log.Fields{Function: "GetSpotCheckTask"})
+	// for i := 0; i < 10; i++ {
+	id := nodeMgr.SelectableNodes.RandomDelete()
+	entry := log.WithFields(log.Fields{Function: "GetSpotCheckTask", MinerID: id})
+	if id == -1 {
+		entry.Debug("can not find miner for spotchecking")
+		return nil, nil, errors.New("no miner for spotchecking")
+	}
+	node := nodeMgr.Nodes[id]
+	if node == nil {
+		entry.Error("cannot find miner")
+		return nil, nil, errors.New("cannot find miner")
+	}
+	if node.Status > 1 || node.Version < int32(nodeMgr.minerVersionThreshold) {
+		nodeMgr.rwlock.Lock()
+		delete(nodeMgr.Nodes, id)
+		delete(nodeMgr.Tasks, id)
+		nodeMgr.rwlock.Unlock()
+		entry.Info("remove miner")
+		return nil, nil, errors.New("remove miner")
+	}
+	if node.Skip {
+		go func() {
+			nodeMgr.PrepareTask(ctx, node)
+			nodeMgr.SelectableNodes.Add(node.ID)
+		}()
+		entry.Debug("retry get spotcheck item")
+		return nil, nil, errors.New("retry get spotcheck item")
+	}
 
+	collectionS := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
+	lastSpotCheck := new(SpotCheckRecord)
+	optionf := new(options.FindOptions)
+	optionf.Sort = bson.M{"timestamp": -1}
+	limit := int64(1)
+	optionf.Limit = &limit
+	cur, err := collectionS.Find(ctx, bson.M{"nid": node.ID}, optionf)
+	if err != nil {
+		entry.WithError(err).Errorf("fetching lastest spotcheck task of miner %d", node.ID)
+		nodeMgr.SelectableNodes.Add(id)
+		return nil, nil, err
+	}
+	defer cur.Close(ctx)
+	if cur.Next(ctx) {
+		err := cur.Decode(lastSpotCheck)
+		if err != nil {
+			entry.WithError(err).Errorf("decoding lastest spotcheck task of miner %d", node.ID)
+			nodeMgr.SelectableNodes.Add(id)
+			return nil, nil, err
+		}
+		entry.Debugf("found lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
+		if (time.Now().Unix()-lastSpotCheck.Timestamp < int64(nodeMgr.spotCheckInterval*60/2)) || lastSpotCheck.Status == 1 {
+			entry.Warnf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
+			nodeMgr.SelectableNodes.Add(id)
+			return nil, nil, fmt.Errorf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
 		}
 	}
+
+	item := nodeMgr.Tasks[node.ID]
+	go func() {
+		nodeMgr.PrepareTask(ctx, node)
+		nodeMgr.SelectableNodes.Add(node.ID)
+	}()
+	// err = nodeMgr.taskManager.InsertSpotCheckItem(ctx, item)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	return node, item, nil
+	// }
+	// entry.Debug("can not find miner for spotchecking")
+	// return nil, nil, errors.New("no miner for spotchecking")
 }
 
 //UpdateNode update node in node manager
@@ -155,11 +210,9 @@ func (nodeMgr *NodeManager) UpdateNode(ctx context.Context, node *Node) {
 		return
 	}
 	nodeMgr.rwlock.Lock()
+	defer nodeMgr.rwlock.Unlock()
 	oldNode := nodeMgr.Nodes[node.ID]
 	if oldNode != nil {
-		nodeMgr.rwlock.Unlock()
-		oldNode.Lock.Lock()
-		defer oldNode.Lock.Unlock()
 		oldNode.NodeID = node.NodeID
 		oldNode.PubKey = node.PubKey
 		oldNode.Owner = node.Owner
@@ -187,29 +240,25 @@ func (nodeMgr *NodeManager) UpdateNode(ctx context.Context, node *Node) {
 		oldNode.Tx = node.Tx
 		oldNode.Rx = node.Rx
 		oldNode.ErrorCount = node.ErrorCount
+		entry.Debugf("update miner info")
 	} else {
-		nodeMgr.Nodes[node.ID] = node
-		node.Processing = true
-		go func() {
-			nodeMgr.PrepareTask(ctx, node)
-			nodeMgr.SelectableNodes.Add(node.ID)
-		}()
-		nodeMgr.rwlock.Unlock()
-		// node.Lock.Lock()
-		// defer node.Lock.Unlock()
-		// if node.Processing {
-		// 	return
-		// }
-		// node.Processing = true
-
+		if node.Status == 1 && node.Version >= int32(nodeMgr.minerVersionThreshold) && node.UsedSpace > 0 {
+			nodeMgr.Nodes[node.ID] = node
+			go func() {
+				nodeMgr.PrepareTask(ctx, node)
+				nodeMgr.SelectableNodes.Add(node.ID)
+			}()
+			entry.Debugf("add new miner")
+		}
 	}
 }
 
 //PrepareTask prepare spotcheck task
 func (nodeMgr *NodeManager) PrepareTask(ctx context.Context, node *Node) error {
-	entry := log.WithFields(log.Fields{Function: "UpdateNode", MinerID: node.ID})
+	entry := log.WithFields(log.Fields{Function: "PrepareTask", MinerID: node.ID})
+	st := time.Now().UnixNano()
 	defer func() {
-		node.Processing = false
+		entry.Debugf("prepare task cost %dms", (time.Now().UnixNano()-st)/1000000)
 	}()
 	if node.FirstShard == 0 {
 		fs, err := nodeMgr.taskManager.FirstShard(ctx, node.ID)
@@ -229,6 +278,7 @@ func (nodeMgr *NodeManager) PrepareTask(ctx context.Context, node *Node) error {
 		if err != nil {
 			entry.WithError(err).Errorf("update skip first shard to %d for miner %d", fs, node.ID)
 		}
+		entry.Debugf("find first shard %d", fs)
 	}
 	item, err := nodeMgr.taskManager.GetSpotCheckItem(ctx, node)
 	if err != nil {
@@ -242,6 +292,7 @@ func (nodeMgr *NodeManager) PrepareTask(ctx context.Context, node *Node) error {
 		}
 		return err
 	}
+
 	nodeMgr.Tasks[node.ID] = item
 	if node.Skip {
 		node.Skip = false
@@ -250,7 +301,7 @@ func (nodeMgr *NodeManager) PrepareTask(ctx context.Context, node *Node) error {
 			entry.WithError(err).Errorf("update skip status to false for miner %d", node.ID)
 		}
 	}
-	entry.Debugf("miner %d generated spotcheck item", node.ID)
+	entry.Debugf("generated spotcheck item %s(%d)", item.CheckShard, len(item.ExtraShards))
 	return nil
 }
 
@@ -268,45 +319,17 @@ func (nodeMgr *NodeManager) UpdateFirstShard(ctx context.Context, minerID int32,
 	return err
 }
 
-//DeleteNode delete node in node manager
-// func (nodeMgr *NodeManager) MarkDeleteNode(node *Node) {
-// 	nodeMgr.rwlock.Lock()
-// 	defer nodeMgr.rwlock.Unlock()
-// 	delete(nodeMgr.Nodes, id)
-
-// 	entry := log.WithFields(log.Fields{Function: "MarkDeleteNode", MinerID: node.ID})
-// 	if node.ID <= 0 {
-// 		entry.Warn("invalid miner ID")
-// 		return
-// 	}
-// 	nodeMgr.rwlock.Lock()
-// 	defer nodeMgr.rwlock.Unlock()
-// 	oldNode := nodeMgr.Nodes[node.ID]
-// 	if oldNode != nil {
-// 		oldNode.Lock.Lock()
-// 		oldNode.Status=node.Status
-// 		oldNode.
-// 	}
-// }
-
-//GetNode get node by node ID
-func (nodeMgr *NodeManager) GetNode(id int32) *Node {
-	nodeMgr.rwlock.RLock()
-	defer nodeMgr.rwlock.RUnlock()
-	return nodeMgr.Nodes[id]
-}
-
-func (nodeMgr *NodeManager) calculateCD() error {
+func (nodeMgr *NodeManager) calculateCD(ctx context.Context) error {
 	entry := log.WithFields(log.Fields{Function: "calculateCD"})
 	collection := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	c, err := collection.CountDocuments(context.Background(), bson.M{"skip": false, "status": 1, "version": bson.M{"$gte": nodeMgr.minerVersionThreshold}})
+	c, err := collection.CountDocuments(ctx, bson.M{"skip": false, "status": 1, "version": bson.M{"$gte": nodeMgr.minerVersionThreshold}})
 	if err != nil {
 		entry.WithError(err).Error("calculating count of spotcheckable miners")
 		return errors.New("error when get count of spotcheckable miners")
 	}
 	atomic.StoreInt64(&nodeMgr.c, c)
 	entry.Debugf("count of spotcheckable miners is %d", c)
-	d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*int64(nodeMgr.avaliableNodeTimeGap)}, "version": bson.M{"$gte": nodeMgr.minerVersionThreshold}})
+	d, err := collection.CountDocuments(ctx, bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*int64(nodeMgr.avaliableNodeTimeGap)}, "version": bson.M{"$gte": nodeMgr.minerVersionThreshold}})
 	if err != nil {
 		entry.WithError(err).Error("calculating count of spotcheck-executing miners")
 		return errors.New("error when get count of spotcheck-executing miners")
@@ -316,7 +339,7 @@ func (nodeMgr *NodeManager) calculateCD() error {
 	return nil
 }
 
-func (nodeMgr *NodeManager) syncNode(node *Node, excludeAddrPrefix string) error {
+func (nodeMgr *NodeManager) syncNode(ctx context.Context, node *Node, excludeAddrPrefix string) error {
 	entry := log.WithFields(log.Fields{Function: "syncNode"})
 	if node.ID == 0 {
 		return errors.New("node ID cannot be 0")
@@ -337,40 +360,42 @@ func (nodeMgr *NodeManager) syncNode(node *Node, excludeAddrPrefix string) error
 	if node.Uspaces == nil {
 		node.Uspaces = make(map[string]int64)
 	}
-	_, err := collection.InsertOne(context.Background(), bson.M{"_id": node.ID, "nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "uspaces": node.Uspaces, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc, "skip": false})
-	if err != nil {
-		errstr := err.Error()
-		if !strings.ContainsAny(errstr, "duplicate key error") {
-			entry.WithError(err).Warnf("inserting node %d to Node table", node.ID)
-			return err
-		}
-		cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
-		for k, v := range node.Uspaces {
-			cond[fmt.Sprintf("uspaces.%s", k)] = v
-		}
-		opts := new(options.FindOneAndUpdateOptions)
-		opts = opts.SetReturnDocument(options.Before)
-		result := collection.FindOneAndUpdate(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
-		oldNode := new(Node)
-		err := result.Decode(oldNode)
-		if err != nil {
-			entry.WithError(err).Warnf("updating record of node %d", node.ID)
-			return err
-		}
-		if oldNode.Status != node.Status {
-			collectionSN := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
-			_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": node.ID}, bson.M{"$set": bson.M{"status": node.Status}})
-			if err != nil {
-				entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
-				return err
-			}
-		}
+	// _, err := collection.InsertOne(context.Background(), bson.M{"_id": node.ID, "nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "uspaces": node.Uspaces, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc, "skip": false})
+	// if err != nil {
+	// 	errstr := err.Error()
+	// 	if !strings.ContainsAny(errstr, "duplicate key error") {
+	// 		entry.WithError(err).Warnf("inserting node %d to Node table", node.ID)
+	// 		return err
+	// 	}
+	cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
+	for k, v := range node.Uspaces {
+		cond[fmt.Sprintf("uspaces.%s", k)] = v
 	}
-	_, err = collectionSN.InsertOne(context.Background(), node)
+	opts := new(options.UpdateOptions)
+	//opts = opts.SetReturnDocument(options.Before)
+	upsert := true
+	opts.Upsert = &upsert
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": node.ID}, bson.M{"$set": cond, "$setOnInsert": bson.M{"skip": false}}, opts)
+	// oldNode := new(Node)
+	// err := result.Decode(oldNode)
 	if err != nil {
-		entry.WithError(err).Warnf("inserting node %d to SpotChecknode table", node.ID)
+		entry.WithError(err).Warnf("updating record of node %d", node.ID)
 		return err
 	}
+	//if oldNode.Status != node.Status {
+	//collectionSN := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	_, err = collectionSN.UpdateOne(ctx, bson.M{"_id": node.ID}, bson.M{"$set": cond}, opts)
+	if err != nil {
+		entry.WithError(err).Warnf("updating status of spotcheck node %d", node.ID)
+		return err
+	}
+	//}
+	//}
+	// _, err = collectionSN.InsertOne(context.Background(), node)
+	// if err != nil {
+	// 	entry.WithError(err).Warnf("inserting node %d to SpotChecknode table", node.ID)
+	// 	return err
+	// }
 	return nil
 }
 

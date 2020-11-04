@@ -1,12 +1,11 @@
 package ytanalysis
 
 import (
-	"sync"
-
 	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+//Message tag
 const (
 	_                   = iota
 	UpdateUspaceMessage //UpdateUspaceMessage message type
@@ -24,6 +23,8 @@ const (
 	ShardHash = "vni"
 	//PoolOwner tag
 	PoolOwner = "poolOwner"
+	//Element tag
+	Element = "element"
 )
 
 // Node instance
@@ -91,9 +92,9 @@ type Node struct {
 	//FirstShard
 	FirstShard int64 `bson:"firstShard"`
 	//Processing
-	Processing bool `bson:"-"`
+	//Processing bool `bson:"-"`
 	//Lock
-	Lock sync.RWMutex `bson:"-"`
+	//Lock sync.RWMutex `bson:"-"`
 }
 
 //NewNode create a node struct
@@ -148,12 +149,13 @@ type SpotCheckTask struct {
 
 //SpotCheckRecord spot check task in database
 type SpotCheckRecord struct {
-	TaskID    string `bson:"_id"`
-	NID       int32  `bson:"nid"`
-	VNI       string `bson:"vni"`
-	Status    int32  `bson:"status"` // 0 - send to client, 1 - receive invalid node, 2 - rechecking
-	Timestamp int64  `bson:"timestamp"`
-	Dup       int64  `bson:"dup"`
+	TaskID      string   `bson:"_id"`
+	NID         int32    `bson:"nid"`
+	VNI         string   `bson:"vni"`
+	ExtraShards []string `bson:"extraShards"`
+	Status      int32    `bson:"status"` // 0 - send to client, 1 - receive invalid node, 2 - rechecking
+	Timestamp   int64    `bson:"timestamp"`
+	Dup         int64    `bson:"dup"`
 }
 
 //DNI dni struct

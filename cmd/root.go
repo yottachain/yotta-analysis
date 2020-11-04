@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -36,11 +37,12 @@ var rootCmd = &cobra.Command{
 		// 	panic("count of mongoDB URL is not equal to SN count\n")
 		// }
 		initLog(config)
-		analyser, err := ytanalysis.New(config.AnalysisDBURL, config.SyncDBURL, config.AuraMQ, config.MiscConfig)
+		ctx := context.Background()
+		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.SyncDBURL, config.AuraMQ, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
-		analyser.StartRecheck()
+		analyser.StartRecheck(ctx)
 		lis, err := net.Listen("tcp", config.BindAddr)
 		if err != nil {
 			log.Fatalf("failed to listen address %s: %s\n", config.BindAddr, err)
