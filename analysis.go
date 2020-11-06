@@ -39,7 +39,7 @@ func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQCon
 		return nil, err
 	}
 	entry.Infof("created syncDB client: %s", analysisDBURL)
-	taskManager := NewTaskManager(analysisdbClient, syncdbClient, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
+	taskManager := NewTaskManager(syncdbClient, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
 	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)
 	if err != nil {
 		entry.WithError(err).Error("creating node manager failed")

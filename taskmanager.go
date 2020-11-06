@@ -18,21 +18,20 @@ import (
 
 //TaskManager spotcheck task manager
 type TaskManager struct {
-	analysisdbClient   *mongo.Client
 	syncDBClient       *mongo.Client
 	SpotCheckStartTime int64
 	SpotCheckEndTime   int64
 }
 
 //NewTaskManager create a new task manager instance
-func NewTaskManager(analysisdbCli, syncdbCli *mongo.Client, spotCheckStartTime, spotCheckEndTime int64) *TaskManager {
-	return &TaskManager{analysisdbClient: analysisdbCli, syncDBClient: syncdbCli, SpotCheckStartTime: spotCheckStartTime, SpotCheckEndTime: spotCheckEndTime}
+func NewTaskManager(syncdbCli *mongo.Client, spotCheckStartTime, spotCheckEndTime int64) *TaskManager {
+	return &TaskManager{syncDBClient: syncdbCli, SpotCheckStartTime: spotCheckStartTime, SpotCheckEndTime: spotCheckEndTime}
 }
 
 //FirstShard find first shard of miner
 func (taskMgr *TaskManager) FirstShard(ctx context.Context, minerID int32) (int64, error) {
 	entry := log.WithFields(log.Fields{Function: "FirstShard", MinerID: minerID})
-	collection := taskMgr.analysisdbClient.Database(MetaDB).Collection(Shards)
+	collection := taskMgr.syncDBClient.Database(MetaDB).Collection(Shards)
 	var limit int64 = 1
 	opt := options.FindOptions{}
 	opt.Limit = &limit
@@ -68,9 +67,9 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	randtag := r.Int31()
 	st := time.Now().UnixNano()
 	defer func() {
-		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+		entry.Tracef("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	}()
-	collection := taskMgr.analysisdbClient.Database(MetaDB).Collection(Shards)
+	collection := taskMgr.syncDBClient.Database(MetaDB).Collection(Shards)
 	startTime := taskMgr.SpotCheckStartTime
 	endTime := taskMgr.SpotCheckEndTime
 	start64 := Int64ToBytes(node.FirstShard)
@@ -78,14 +77,14 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	if sTime >= startTime {
 		startTime = sTime
 	}
-	entry.Debugf("start time of spotcheck time range is %d", startTime)
+	entry.Tracef("start time of spotcheck time range is %d", startTime)
 	var limit int64 = 1
 	opt := options.FindOptions{}
 	opt.Limit = &limit
 	opt.Sort = bson.M{"_id": -1}
 	lastShard := new(Shard)
 	cur1, err := collection.Find(ctx, bson.M{"nodeId": node.ID}, &opt)
-	entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	entry.Tracef("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("find last shard failed")
 		return "", fmt.Errorf("find last shard failed: %s", err.Error())
@@ -97,7 +96,7 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 			entry.WithError(err).Error("decoding last shard failed")
 			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
 		}
-		entry.Debugf("found last shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
+		entry.Tracef("found last shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
 	} else {
 		entry.Error("cannot find last shard")
 		return "", fmt.Errorf("cannot find last shard")
@@ -107,7 +106,7 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	if eTime <= endTime || endTime == 0 {
 		endTime = eTime
 	}
-	entry.Debugf("end time of spotcheck time range is %d", endTime)
+	entry.Tracef("end time of spotcheck time range is %d", endTime)
 	if startTime >= endTime {
 		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")
 		return "", fmt.Errorf("no valid shards can be spotchecked")
@@ -121,7 +120,7 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	selectedID := BytesToInt64(sel32)
 	selectedShard := new(Shard)
 	cur2, err := collection.Find(ctx, bson.M{"nodeId": node.ID, "_id": bson.M{"$gte": selectedID}}, &opt)
-	entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	entry.Tracef("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("finding random shard")
 		return "", fmt.Errorf("find random shard failed: %s", err.Error())
@@ -133,7 +132,7 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 			entry.WithError(err).Error("decoding random shard")
 			return "", fmt.Errorf("error when decoding random shard: %s", err.Error())
 		}
-		entry.Debugf("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF.Data))
+		entry.Tracef("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF.Data))
 	} else {
 		entry.Error("cannot find random shard")
 		return "", fmt.Errorf("cannot find random shard")
