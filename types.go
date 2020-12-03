@@ -208,6 +208,7 @@ var (
 	AnalysisDB       = "analysis"
 	SpotCheckTab     = "SpotCheck"
 	SpotCheckNodeTab = "SpotCheckNode"
+	TrackProgressTab = "TrackProgress"
 )
 
 //index type of node and supernode collection

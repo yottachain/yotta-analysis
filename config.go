@@ -27,6 +27,15 @@ const (
 	//AuramqClientIDField Field name of auramq.client-id
 	AuramqClientIDField = "auramq.client-id"
 
+	//MinerStatAllSyncURLsField Field name of miner-stat.all-sync-urls
+	MinerStatAllSyncURLsField = "miner-stat.all-sync-urls"
+	//MinerStatBatchSizeField Field name of miner-stat.batch-size
+	MinerStatBatchSizeField = "miner-stat.batch-size"
+	//MinerStatWaitTimeField Field name of miner-stat.wait-time
+	MinerStatWaitTimeField = "miner-stat.wait-time"
+	//MinerStatSkipTimeField Field name of miner-stat.skip-time
+	MinerStatSkipTimeField = "miner-stat.skip-time"
+
 	//LoggerOutputField Field name of logger.output config
 	LoggerOutputField = "logger.output"
 	//LoggerFilePathField Field name of logger.file-path config
@@ -76,12 +85,13 @@ const (
 
 //Config system configuration
 type Config struct {
-	BindAddr      string        `mapstructure:"bind-addr"`
-	AnalysisDBURL string        `mapstructure:"analysisdb-url"`
-	SyncDBURL     string        `mapstructure:"syncdb-url"`
-	AuraMQ        *AuraMQConfig `mapstructure:"auramq"`
-	Logger        *LogConfig    `mapstructure:"logger"`
-	MiscConfig    *MiscConfig   `mapstructure:"misc"`
+	BindAddr      string           `mapstructure:"bind-addr"`
+	AnalysisDBURL string           `mapstructure:"analysisdb-url"`
+	SyncDBURL     string           `mapstructure:"syncdb-url"`
+	AuraMQ        *AuraMQConfig    `mapstructure:"auramq"`
+	MinerStat     *MinerStatConfig `mapstructure:"miner-stat"`
+	Logger        *LogConfig       `mapstructure:"logger"`
+	MiscConfig    *MiscConfig      `mapstructure:"misc"`
 }
 
 //AuraMQConfig auramq configuration
@@ -95,6 +105,14 @@ type AuraMQConfig struct {
 	Account              string   `mapstructure:"account"`
 	PrivateKey           string   `mapstructure:"private-key"`
 	ClientID             string   `mapstructure:"client-id"`
+}
+
+//MinerStatConfig miner log sync configuration
+type MinerStatConfig struct {
+	AllSyncURLs []string `mapstructure:"all-sync-urls"`
+	BatchSize   int      `mapstructure:"batch-size"`
+	WaitTime    int      `mapstructure:"wait-time"`
+	SkipTime    int      `mapstructure:"skip-time"`
 }
 
 //LogConfig system log configuration

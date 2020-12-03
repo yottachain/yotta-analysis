@@ -8,7 +8,6 @@ require (
 	github.com/golang/protobuf v1.4.1
 	github.com/ivpusic/grpool v1.0.0
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869 // indirect
-	github.com/labstack/gommon v0.3.0
 	github.com/lestrrat-go/file-rotatelogs v2.3.0+incompatible
 	github.com/lestrrat-go/strftime v1.0.1 // indirect
 	github.com/libp2p/go-libp2p-core v0.3.0

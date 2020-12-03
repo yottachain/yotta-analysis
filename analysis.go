@@ -2,6 +2,7 @@ package ytanalysis
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/ivpusic/grpool"
 	log "github.com/sirupsen/logrus"
@@ -14,6 +15,8 @@ type Analyser struct {
 	//clients          []*mongo.Client
 	nodeMgr          *NodeManager
 	analysisdbClient *mongo.Client
+	httpCli          *http.Client
+	minerStat        *MinerStatConfig
 	//dbnameIndexed    bool
 	// eostx   *eostx.EosTX
 	checker *Host
@@ -26,7 +29,7 @@ type Analyser struct {
 }
 
 //New create new analyser instance
-func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
 	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
@@ -81,7 +84,7 @@ func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQCon
 	// 	entry.WithError(err).Error("creating mq clients map failed")
 	// 	return nil, err
 	// }
-	analyser := &Analyser{nodeMgr: nodeManager, analysisdbClient: analysisdbClient, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
+	analyser := &Analyser{nodeMgr: nodeManager, analysisdbClient: analysisdbClient, httpCli: &http.Client{}, minerStat: msConfig, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
 	// err = analyser.calculateCD()
 	// if err != nil {
 	// 	entry.WithError(err).Error("calculate c & d failed")
