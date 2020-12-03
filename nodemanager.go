@@ -36,6 +36,7 @@ type NodeManager struct {
 	avaliableNodeTimeGap  int
 	spotCheckInterval     int
 	rwlock                *sync.RWMutex
+	rwlock2               *sync.RWMutex
 }
 
 //NewNodeManager create new node manager
@@ -48,6 +49,7 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 	nodeMgr.Nodes = make(map[int32]*Node)
 	nodeMgr.Tasks = make(map[int32]*SpotCheckItem)
 	nodeMgr.rwlock = new(sync.RWMutex)
+	nodeMgr.rwlock2 = new(sync.RWMutex)
 	nodeMgr.minerVersionThreshold = int(minerVersionThreshold)
 	nodeMgr.avaliableNodeTimeGap = int(avaliableNodeTimeGap)
 	nodeMgr.spotCheckInterval = int(spotCheckInterval)
@@ -71,15 +73,29 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 	}
 	entry.Info("nodes cache filled")
 	var wg sync.WaitGroup
-	wg.Add(len(nodeMgr.Nodes))
+	//wg.Add(len(nodeMgr.Nodes))
+	wg.Add(1000)
+	idx := 0
 	for _, node := range nodeMgr.Nodes {
 		n := node
+		idx++
 		go func() {
 			defer wg.Done()
 			nodeMgr.PrepareTask(ctx, n)
 		}()
+		if idx%1000 == 0 {
+			wg.Wait()
+			wg = sync.WaitGroup{}
+			wg.Add(1000)
+			idx = 0
+		}
 	}
-	wg.Wait()
+	for j := 0; j < 1000-idx; j++ {
+		wg.Done()
+	}
+	if idx != 0 {
+		wg.Wait()
+	}
 	entry.Infof("cached %d miners", len(nodeMgr.Nodes))
 	pool := grpool.NewPool(poolLength, queueLength)
 	callback := func(msg *msg.Message) {
@@ -145,8 +161,10 @@ func (nodeMgr *NodeManager) GetSpotCheckTask(ctx context.Context) (*Node, *SpotC
 	if node.Status > 1 || node.Version < int32(nodeMgr.minerVersionThreshold) {
 		nodeMgr.rwlock.Lock()
 		delete(nodeMgr.Nodes, id)
-		delete(nodeMgr.Tasks, id)
 		nodeMgr.rwlock.Unlock()
+		nodeMgr.rwlock2.Lock()
+		delete(nodeMgr.Tasks, id)
+		nodeMgr.rwlock2.Unlock()
 		entry.Info("remove miner")
 		return nil, nil, errors.New("remove miner")
 	}
@@ -293,7 +311,9 @@ func (nodeMgr *NodeManager) PrepareTask(ctx context.Context, node *Node) error {
 		return err
 	}
 
+	nodeMgr.rwlock2.Lock()
 	nodeMgr.Tasks[node.ID] = item
+	nodeMgr.rwlock2.Unlock()
 	if node.Skip {
 		node.Skip = false
 		err := nodeMgr.UpdateSkip(ctx, node.ID, false)
