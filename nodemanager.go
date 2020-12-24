@@ -153,7 +153,9 @@ func (nodeMgr *NodeManager) GetSpotCheckTask(ctx context.Context) (*Node, *SpotC
 		entry.Debug("can not find miner for spotchecking")
 		return nil, nil, errors.New("no miner for spotchecking")
 	}
+	nodeMgr.rwlock.Lock()
 	node := nodeMgr.Nodes[id]
+	nodeMgr.rwlock.Unlock()
 	if node == nil {
 		entry.Error("cannot find miner")
 		return nil, nil, errors.New("cannot find miner")
@@ -204,8 +206,9 @@ func (nodeMgr *NodeManager) GetSpotCheckTask(ctx context.Context) (*Node, *SpotC
 			return nil, nil, fmt.Errorf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
 		}
 	}
-
+	nodeMgr.rwlock2.Lock()
 	item := nodeMgr.Tasks[node.ID]
+	nodeMgr.rwlock2.Unlock()
 	go func() {
 		nodeMgr.PrepareTask(ctx, node)
 		nodeMgr.SelectableNodes.Add(node.ID)

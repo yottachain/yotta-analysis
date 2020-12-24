@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -315,6 +316,9 @@ func (analyser *Analyser) CheckVNI(ctx context.Context, node *Node, spr *SpotChe
 	defer cancle2()
 	shardData, err := analyser.checker.SendMsg(ctx2, node.NodeID, append(pb.MsgIDDownloadShardRequest.Bytes(), checkData...))
 	if err != nil {
+		if strings.ContainsAny(err.Error(), "YTFS: data not found") {
+			return false, nil
+		}
 		entry.WithError(err).Error("sending rechecking command failed")
 		return false, err
 	}
