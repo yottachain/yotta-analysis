@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/ivpusic/grpool"
+	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -29,18 +31,21 @@ type Analyser struct {
 }
 
 //New create new analyser instance
-func New(ctx context.Context, analysisDBURL, syncDBURL string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL, syncDBURL string, maxOpenConns, maxIdelConns int, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
 	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
 		entry.WithError(err).Errorf("creating analysisDB client failed: %s", analysisDBURL)
 		return nil, err
 	}
-	syncdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(syncDBURL))
+	syncdbClient, err := sqlx.ConnectContext(ctx, "mysql", syncDBURL)
 	if err != nil {
 		entry.WithError(err).Errorf("creating syncDB client failed: %s", syncDBURL)
 		return nil, err
 	}
+	syncdbClient.SetMaxOpenConns(maxOpenConns)
+	syncdbClient.SetMaxIdleConns(maxIdelConns)
+
 	entry.Infof("created syncDB client: %s", analysisDBURL)
 	taskManager := NewTaskManager(syncdbClient, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
 	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)

@@ -2,6 +2,7 @@ package ytanalysis
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -10,54 +11,37 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 //TaskManager spotcheck task manager
 type TaskManager struct {
-	syncDBClient       *mongo.Client
+	syncDBClient       *sqlx.DB
 	SpotCheckStartTime int64
 	SpotCheckEndTime   int64
 }
 
 //NewTaskManager create a new task manager instance
-func NewTaskManager(syncdbCli *mongo.Client, spotCheckStartTime, spotCheckEndTime int64) *TaskManager {
+func NewTaskManager(syncdbCli *sqlx.DB, spotCheckStartTime, spotCheckEndTime int64) *TaskManager {
 	return &TaskManager{syncDBClient: syncdbCli, SpotCheckStartTime: spotCheckStartTime, SpotCheckEndTime: spotCheckEndTime}
 }
 
 //FirstShard find first shard of miner
 func (taskMgr *TaskManager) FirstShard(ctx context.Context, minerID int32) (int64, error) {
 	entry := log.WithFields(log.Fields{Function: "FirstShard", MinerID: minerID})
-	collection := taskMgr.syncDBClient.Database(MetaDB).Collection(Shards)
-	var limit int64 = 1
-	opt := options.FindOptions{}
-	opt.Limit = &limit
-	opt.Sort = bson.M{"_id": 1}
 	firstShard := new(Shard)
-	cur, err := collection.Find(ctx, bson.M{"nodeId": minerID}, &opt)
+	err := taskMgr.syncDBClient.QueryRowxContext(ctx, "select * from shards where nid=? order by id asc limit 1", minerID).StructScan(firstShard)
 	if err != nil {
-		entry.WithError(err).Error("find first shard failed")
-		return -1, fmt.Errorf("find first shard failed: %s", err.Error())
-	}
-	defer cur.Close(ctx)
-	if cur.Next(ctx) {
-		err := cur.Decode(firstShard)
-		if err != nil {
-			if err == mongo.ErrNoDocuments {
-				entry.Warnf("no shards found")
-				return -1, nil
-			}
-			entry.WithError(err).Error("decoding first shard failed")
-			return -1, fmt.Errorf("error when decoding first shard: %s", err.Error())
+		if err == sql.ErrNoRows {
+			entry.Warnf("no shard found")
+			return -1, nil
 		}
-		entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
-		return firstShard.ID, nil
+		entry.WithError(err).Error("decoding first shard failed")
+		return -1, fmt.Errorf("error when decoding first shard: %s", err.Error())
 	}
-	entry.Error("cannot find first shard")
-	return -1, fmt.Errorf("cannot find first shard")
+	entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF))
+	return firstShard.ID, nil
 }
 
 //randomVNI get a random VNI from one miner
@@ -69,7 +53,6 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	defer func() {
 		entry.Tracef("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	}()
-	collection := taskMgr.syncDBClient.Database(MetaDB).Collection(Shards)
 	startTime := taskMgr.SpotCheckStartTime
 	endTime := taskMgr.SpotCheckEndTime
 	start64 := Int64ToBytes(node.FirstShard)
@@ -78,29 +61,18 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 		startTime = sTime
 	}
 	entry.Tracef("start time of spotcheck time range is %d", startTime)
-	var limit int64 = 1
-	opt := options.FindOptions{}
-	opt.Limit = &limit
-	opt.Sort = bson.M{"_id": -1}
 	lastShard := new(Shard)
-	cur1, err := collection.Find(ctx, bson.M{"nodeId": node.ID}, &opt)
-	entry.Tracef("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	err := taskMgr.syncDBClient.QueryRowxContext(ctx, "select * from shards where nid=? order by id desc limit 1", node.ID).StructScan(lastShard)
 	if err != nil {
-		entry.WithError(err).Error("find last shard failed")
-		return "", fmt.Errorf("find last shard failed: %s", err.Error())
-	}
-	defer cur1.Close(ctx)
-	if cur1.Next(ctx) {
-		err := cur1.Decode(lastShard)
-		if err != nil {
-			entry.WithError(err).Error("decoding last shard failed")
-			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
+		if err == sql.ErrNoRows {
+			entry.Error("cannot find last shard")
+			return "", fmt.Errorf("cannot find last shard")
 		}
-		entry.Tracef("found last shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
-	} else {
-		entry.Error("cannot find last shard")
-		return "", fmt.Errorf("cannot find last shard")
+		entry.WithError(err).Error("decoding last shard failed")
+		return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
 	}
+	entry.Tracef("found last shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF))
+
 	end64 := Int64ToBytes(lastShard.ID)
 	eTime := int64(BytesToInt32(end64[0:4]))
 	if eTime <= endTime || endTime == 0 {
@@ -111,7 +83,6 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")
 		return "", fmt.Errorf("no valid shards can be spotchecked")
 	}
-	opt.Sort = bson.M{"_id": 1}
 	delta := rand.Int63n(endTime - startTime)
 	selectedTime := startTime + delta
 	sel32 := Int32ToBytes(int32(selectedTime))
@@ -119,25 +90,18 @@ func (taskMgr *TaskManager) randomVNI(ctx context.Context, node *Node) (string, 
 	sel32 = append(sel32, Uint32ToBytes(rand32)...)
 	selectedID := BytesToInt64(sel32)
 	selectedShard := new(Shard)
-	cur2, err := collection.Find(ctx, bson.M{"nodeId": node.ID, "_id": bson.M{"$gte": selectedID}}, &opt)
-	entry.Tracef("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	err = taskMgr.syncDBClient.QueryRowxContext(ctx, "select * from shards where nid=? and id>=? order by id asc limit 1", node.ID, selectedID).StructScan(selectedShard)
 	if err != nil {
-		entry.WithError(err).Error("finding random shard")
-		return "", fmt.Errorf("find random shard failed: %s", err.Error())
-	}
-	defer cur2.Close(ctx)
-	if cur2.Next(ctx) {
-		err := cur2.Decode(selectedShard)
-		if err != nil {
-			entry.WithError(err).Error("decoding random shard")
-			return "", fmt.Errorf("error when decoding random shard: %s", err.Error())
+		if err == sql.ErrNoRows {
+			entry.Error("cannot find random shard")
+			return "", fmt.Errorf("cannot find random shard")
 		}
-		entry.Tracef("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF.Data))
-	} else {
-		entry.Error("cannot find random shard")
-		return "", fmt.Errorf("cannot find random shard")
+		entry.WithError(err).Error("decoding random shard")
+		return "", fmt.Errorf("error when decoding random shard: %s", err.Error())
 	}
-	return base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, selectedShard.VHF.Data...)), nil
+	entry.Tracef("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	entry.Tracef("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF))
+	return base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, selectedShard.VHF...)), nil
 }
 
 //SpotCheckItem Spotcheck item
@@ -189,19 +153,3 @@ func (taskMgr *TaskManager) GetSpotCheckItem(ctx context.Context, node *Node) (*
 	entry.Debugf("create spotcheck item cost %dms", (time.Now().UnixNano()-start)/1000000)
 	return &SpotCheckItem{MinerID: node.ID, CheckShard: checkShard, ExtraShards: extraShards}, nil
 }
-
-//InsertSpotCheckItem insert spotcheck item to database
-// func (taskMgr *TaskManager) InsertSpotCheckItem(ctx context.Context, item *SpotCheckItem) error {
-// 	entry := log.WithFields(log.Fields{Function: "InsertSpotCheckItem", MinerID: item.MinerID})
-// 	collection := taskMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckItemTab)
-// 	opts := new(options.UpdateOptions)
-// 	upsert := true
-// 	opts.Upsert = &upsert
-// 	cond := bson.M{"checkShard": item.CheckShard, "extraShards": item.ExtraShards}
-// 	_, err := collection.UpdateOne(context.Background(), bson.M{"_id": item.MinerID}, bson.M{"$set": cond}, opts)
-// 	if err != nil {
-// 		entry.WithError(err).Error("insert spotcheck item")
-// 		return err
-// 	}
-// 	return nil
-// }

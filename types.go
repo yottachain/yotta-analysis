@@ -174,10 +174,10 @@ type VNI struct {
 
 //Shard shard struct
 type Shard struct {
-	ID      int64            `bson:"_id"`
-	BlockID int64            `bson:"blockId"`
-	NodeID  int32            `bson:"nodeId"`
-	VHF     primitive.Binary `bson:"VHF"`
+	ID      int64  `bson:"_id" db:"id"`
+	BlockID int64  `bson:"blockId" db:"bid"`
+	NodeID  int32  `bson:"nodeId" db:"nid"`
+	VHF     []byte `bson:"VHF" db:"vhf"`
 }
 
 //PoolWeight infomation of pool

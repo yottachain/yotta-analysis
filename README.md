@@ -10,8 +10,8 @@ $ go build -o analysis
 bind-addr: ":8080"
 #分析库的URL地址，默认为mongodb://127.0.0.1:27017/?connect=direct
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
-#同步库的URL地址，默认为mongodb://127.0.0.1:27017/?connect=direct
-syncdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+#同步库的URL地址，默认为root:root@tcp(127.0.0.1:3306)/metabase
+syncdb-url: "root:root@tcp(127.0.0.1:3306)/metabase"
 #消息队列相关配置
 auramq:
   #本地订阅者接收队列长度，默认值1024
