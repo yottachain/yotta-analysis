@@ -15,7 +15,7 @@ type Server struct {
 
 // GetSpotCheckList implemented GetSpotCheckList function of AnalysisServer
 func (server *Server) GetSpotCheckList(ctx context.Context, req *pb.Empty) (*pb.SpotCheckListMsg, error) {
-	spotCheckList, err := server.Analyser.GetSpotCheckList()
+	spotCheckList, err := server.Analyser.GetSpotCheckList(context.Background())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
@@ -33,7 +33,7 @@ func (server *Server) IsNodeSelected(ctx context.Context, req *pb.Empty) (*pb.Bo
 
 // UpdateTaskStatus implemented UpdateTaskStatus function of AnalysisServer
 func (server *Server) UpdateTaskStatus(ctx context.Context, req *pb.UpdateTaskStatusReq) (*pb.Empty, error) {
-	err := server.Analyser.UpdateTaskStatus(req.GetId(), req.GetInvalidNode())
+	err := server.Analyser.UpdateTaskStatus(context.Background(), req.GetId(), req.GetInvalidNode())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}

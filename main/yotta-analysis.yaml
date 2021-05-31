@@ -1,5 +1,7 @@
 bind-addr: ":8080"
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
+pd-urls: 
+- "127.0.0.1:2379"
 auramq:
   subscriber-buffer-size: 1024
   ping-wait: 30
@@ -15,6 +17,16 @@ auramq:
   account: "yottanalysis"
   private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
   client-id: "yottaanalysis"
+miner-stat:
+  all-sync-urls:
+  - "http://127.0.0.1:8091"
+  - "http://127.0.0.1:8092"
+  - "http://127.0.0.1:8093"
+  - "http://127.0.0.1:8094"
+  - "http://127.0.0.1:8095"
+  batch-size: 100
+  wait-time: 10
+  skip-time: 180
 logger:
   output: "file"
   file-path: "./spotcheck.log"

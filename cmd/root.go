@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -36,11 +37,13 @@ var rootCmd = &cobra.Command{
 		// 	panic("count of mongoDB URL is not equal to SN count\n")
 		// }
 		initLog(config)
-		analyser, err := ytanalysis.New(config.AnalysisDBURL, config.AuraMQ, config.MiscConfig)
+		ctx := context.Background()
+		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.AuraMQ, config.MinerStat, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
-		analyser.StartRecheck()
+		analyser.StartRecheck(ctx)
+		analyser.TrackingStat(ctx)
 		lis, err := net.Listen("tcp", config.BindAddr)
 		if err != nil {
 			log.Fatalf("failed to listen address %s: %s\n", config.BindAddr, err)
@@ -150,6 +153,8 @@ var (
 	DefaultBindAddr string = ":8080"
 	//DefaultAnalysisDBURL default value of AnalysisDBURL
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
+	//DefaultPDURLs default value of PDURLs
+	DefaultPDURLs []string = []string{"127.0.0.1:2379"}
 
 	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
 	DefaultAuramqSubscriberBufferSize = 1024
@@ -169,6 +174,15 @@ var (
 	DefaultAuramqPrivateKey = ""
 	//DefaultAuramqClientID default value of AuramqClientID
 	DefaultAuramqClientID = "yottaanalysis"
+
+	//DefaultMinerStatAllSyncURLs default value of MinerStatAllSyncURLs
+	DefaultMinerStatAllSyncURLs = []string{}
+	//DefaultMinerStatBatchSize default value of MinerStatBatchSize
+	DefaultMinerStatBatchSize = 100
+	//DefaultMinerStatWaitTime default value of MinerStatWaitTime
+	DefaultMinerStatWaitTime = 10
+	//DefaultMinerStatSkipTime default value of MinerStatSkipTime
+	DefaultMinerStatSkipTime = 180
 
 	//DefaultLoggerOutput default value of LoggerOutput
 	DefaultLoggerOutput string = "stdout"
@@ -223,6 +237,8 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.BindAddrField, rootCmd.PersistentFlags().Lookup(ytanalysis.BindAddrField))
 	rootCmd.PersistentFlags().String(ytanalysis.AnalysisDBURLField, DefaultAnalysisDBURL, "mongoDB URL of analysis database")
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.PDURLsField, DefaultPDURLs, "URLs of PD")
+	viper.BindPFlag(ytanalysis.PDURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.PDURLsField))
 	//AuraMQ config
 	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
 	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))
@@ -242,6 +258,15 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
 	rootCmd.PersistentFlags().String(ytanalysis.AuramqClientIDField, DefaultAuramqClientID, "client ID for identifying MQ client")
 	viper.BindPFlag(ytanalysis.AuramqClientIDField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqClientIDField))
+	//MinerStat config
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.MinerStatAllSyncURLsField, DefaultMinerStatAllSyncURLs, "all URLs of sync services, in the form of --miner-stat.all-sync-urls \"URL1,URL2,URL3\"")
+	viper.BindPFlag(ytanalysis.MinerStatAllSyncURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerStatAllSyncURLsField))
+	rootCmd.PersistentFlags().Int(ytanalysis.MinerStatBatchSizeField, DefaultMinerStatBatchSize, "batch size when fetching miner logs")
+	viper.BindPFlag(ytanalysis.MinerStatBatchSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerStatBatchSizeField))
+	rootCmd.PersistentFlags().Int(ytanalysis.MinerStatWaitTimeField, DefaultMinerStatWaitTime, "wait time when no new miner logs can be fetched")
+	viper.BindPFlag(ytanalysis.MinerStatWaitTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerStatWaitTimeField))
+	rootCmd.PersistentFlags().Int(ytanalysis.MinerStatSkipTimeField, DefaultMinerStatSkipTime, "ensure not to fetching miner logs till the end")
+	viper.BindPFlag(ytanalysis.MinerStatSkipTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerStatSkipTimeField))
 	//logger config
 	rootCmd.PersistentFlags().String(ytanalysis.LoggerOutputField, DefaultLoggerOutput, "Output type of logger(stdout or file)")
 	viper.BindPFlag(ytanalysis.LoggerOutputField, rootCmd.PersistentFlags().Lookup(ytanalysis.LoggerOutputField))

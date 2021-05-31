@@ -21,36 +21,18 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var EmptyShardError = errors.New("downloading shard response is empty")
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (analyser *Analyser) calculateCD() error {
-	entry := log.WithFields(log.Fields{Function: "CalculateCD"})
-	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	if err != nil {
-		entry.WithError(err).Error("calculating count of spotcheckable miners")
-		return errors.New("error when get count of spotcheckable miners")
-	}
-	atomic.StoreInt64(&analyser.c, c)
-	entry.Debugf("count of spotcheckable miners is %d", c)
-	d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	if err != nil {
-		entry.WithError(err).Error("calculating count of spotcheck-executing miners")
-		return errors.New("error when get count of spotcheck-executing miners")
-	}
-	atomic.StoreInt64(&analyser.d, d)
-	entry.Debugf("count of spotcheck-executing miners is %d", d)
-	return nil
-}
-
 //StartRecheck starting recheck process
-func (analyser *Analyser) StartRecheck() {
+func (analyser *Analyser) StartRecheck(ctx context.Context) {
 	entry := log.WithFields(log.Fields{Function: "StartRecheck"})
 	entry.Info("starting deprecated task reaper...")
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
-	_, err := collectionS.UpdateMany(context.Background(), bson.M{"status": 1}, bson.M{"$set": bson.M{"status": 0}})
+	_, err := collectionS.UpdateMany(ctx, bson.M{"status": 1}, bson.M{"$set": bson.M{"status": 0}})
 	if err != nil {
 		entry.WithError(err).Error("updating spotcheck tasks with status 1 to 0")
 	} else {
@@ -61,25 +43,16 @@ func (analyser *Analyser) StartRecheck() {
 			entry.Debug("reaper process sleep for 1 hour")
 			time.Sleep(time.Duration(1) * time.Hour)
 			now := time.Now().Unix()
-			_, err := collectionS.DeleteMany(context.Background(), bson.M{"timestamp": bson.M{"$lt": now - 3600*24}})
+			_, err := collectionS.DeleteMany(ctx, bson.M{"timestamp": bson.M{"$lt": now - 3600*24}})
 			if err != nil {
 				entry.WithError(err).Warn("deleting expired spotcheck tasks")
 			}
 			entry.Debug("deleted expired spotcheck tasks")
 		}
 	}()
-	go func() {
-		for {
-			err := analyser.calculateCD()
-			if err != nil {
-				entry.Warnf("calculate c & d failed")
-			}
-			time.Sleep(time.Duration(3) * time.Minute)
-		}
-	}()
 }
 
-func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
+func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
 	entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
 	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	errTime := time.Now().Unix() - int64(analyser.Params.PoolErrorMinerTimeThreshold) //int64(spotcheckInterval)*60 - int64(punishPhase1)*punishGapUnit
@@ -88,14 +61,14 @@ func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 		{{"$project", bson.D{{"poolOwner", 1}, {"err", bson.D{{"$cond", bson.D{{"if", bson.D{{"$or", bson.A{bson.D{{"$eq", bson.A{"$status", 2}}}, bson.D{{"$lt", bson.A{"$timestamp", errTime}}}}}}}, {"then", 1}, {"else", 0}}}}}}}},
 		{{"$group", bson.D{{"_id", "$poolOwner"}, {"poolTotalCount", bson.D{{"$sum", 1}}}, {"poolErrorCount", bson.D{{"$sum", "$err"}}}}}},
 	}
-	cur, err := collection.Aggregate(context.Background(), pipeline)
+	cur, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		entry.WithError(err).Warnf("aggregating miner count of pool owner %s", poolOwner)
 		return false
 	}
-	defer cur.Close(context.Background())
+	defer cur.Close(ctx)
 	pw := new(PoolWeight)
-	if cur.Next(context.Background()) {
+	if cur.Next(ctx) {
 		err := cur.Decode(pw)
 		if err != nil {
 			entry.WithError(err).Warnf("decoding miner count of pool owner %s", poolOwner)
@@ -114,38 +87,23 @@ func (analyser *Analyser) ifNeedPunish(minerID int32, poolOwner string) bool {
 	return false
 }
 
-func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
+func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *SpotCheckRecord) {
 	entry := log.WithFields(log.Fields{Function: "checkDataNode", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
 	entry.Info("task is under rechecking")
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
-	node := new(Node)
-	err := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab).FindOne(context.Background(), bson.M{"_id": spr.NID}).Decode(node)
-	if err != nil {
-		entry.WithError(err).Error("decoding miner info which performing rechecking")
-		defer func() {
-			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-			if err != nil {
-				entry.WithError(err).Error("updating task status to 0")
-			} else {
-				entry.Debug("task status is updated to 0")
-			}
-		}()
-		return
-	}
-	entry.Debug("decoded miner info")
 	scNode := new(Node)
 	opts := new(options.FindOneAndUpdateOptions)
 	opts = opts.SetReturnDocument(options.After)
 	entry.Debug("checking shard")
-	b, err := analyser.CheckVNI(node, spr)
+	b, err := analyser.CheckVNI(ctx, node, spr)
 	if err != nil {
 		entry.WithError(err).Warn("checking shard")
-		err = collectionSN.FindOneAndUpdate(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
+		err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
 		if err != nil {
 			entry.WithError(err).Error("increasing error count of miner")
 			defer func() {
-				_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+				_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
 				if err != nil {
 					entry.WithError(err).Error("updating task status to 0")
 				} else {
@@ -156,22 +114,22 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 		}
 		errCount := scNode.ErrorCount
 		if errCount > analyser.Params.PunishPhase3 {
-			_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+			_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
 			if err != nil {
 				entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
 			}
 			errCount = analyser.Params.PunishPhase3
 		}
 		if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-			if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
-				analyser.punish(0, node.ID, errCount, true)
+			if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+				analyser.punish(ctx, 0, node.ID, errCount, true)
 			} else {
-				analyser.punish(0, node.ID, errCount, false)
+				analyser.punish(ctx, 0, node.ID, errCount, false)
 			}
 		}
-		entry.Debug("increasing error count of miner")
+		entry.Debugf("increasing error count of miner: %d", errCount)
 		defer func() {
-			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
 			if err != nil {
 				entry.WithError(err).Error("updating task status to 2")
 			} else {
@@ -180,44 +138,32 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 		}()
 	} else {
 		if b {
-			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
 			if err != nil {
 				entry.WithError(err).Error("updating task status to 0")
 			} else {
 				entry.Info("rechecking shard successful")
 			}
-			analyser.punish(int32(0), node.ID, int32(0), false)
+			analyser.punish(ctx, int32(0), node.ID, int32(0), false)
 			return
 		}
 		entry.Info("rechecking shard failed, checking 100 more shards")
 		i := 0
 		var errCount int64 = 0
 		flag := true
-		for range [100]byte{} {
+		for j := 0; i < 100; j++ {
 			i++
-			spr.VNI, err = analyser.getRandomVNI(node.ID)
-			if err != nil {
-				entry.WithError(err).Errorf("get random shard %d failed", i)
-				defer func() {
-					_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-					if err != nil {
-						entry.WithError(err).Error("updating task status to 0")
-					} else {
-						entry.Debug("task status is updated to 0")
-					}
-				}()
-				return
-			}
+			spr.VNI = spr.ExtraShards[j]
 			entry.Debugf("generated random shard %d: %s", i, spr.VNI)
-			b, err := analyser.CheckVNI(node, spr)
+			b, err := analyser.CheckVNI(ctx, node, spr)
 			if err != nil {
 				flag = false
 				entry.WithError(err).Debugf("checking shard %d: %s", i, spr.VNI)
-				err = collectionSN.FindOneAndUpdate(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
+				err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
 				if err != nil {
 					entry.WithError(err).Error("increasing error count of miner")
 					defer func() {
-						_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+						_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
 						if err != nil {
 							entry.WithError(err).Error("updating task status to 0")
 						} else {
@@ -228,20 +174,20 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 				}
 				errCount2 := scNode.ErrorCount
 				if errCount2 > analyser.Params.PunishPhase3 {
-					_, err := collectionSN.UpdateOne(context.Background(), bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+					_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
 					if err != nil {
 						entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
 					}
 					errCount2 = analyser.Params.PunishPhase3
 				}
 				if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-					if analyser.ifNeedPunish(node.ID, node.PoolOwner) {
-						analyser.punish(0, node.ID, errCount2, true)
+					if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+						analyser.punish(ctx, 0, node.ID, errCount2, true)
 					} else {
-						analyser.punish(0, node.ID, errCount2, false)
+						analyser.punish(ctx, 0, node.ID, errCount2, false)
 					}
 				}
-				entry.Debug("increasing error count of miner")
+				entry.Debugf("increasing error count of miner: %d", errCount2)
 				break
 			}
 			if !b {
@@ -252,7 +198,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 			}
 		}
 		defer func() {
-			_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
 			if err != nil {
 				entry.WithError(err).Error("updating task status to 2")
 			} else {
@@ -264,15 +210,15 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 			if errCount == 100 {
 				entry.Warnf("100/100 random shards checking failed, punish %d%% deposit", analyser.Params.PunishPhase3Percent)
 				if analyser.Params.PunishPhase3Percent > 0 {
-					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
-						analyser.punish(2, node.ID, analyser.Params.PunishPhase3Percent, true)
+					if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+						analyser.punish(ctx, 2, node.ID, analyser.Params.PunishPhase3Percent, true)
 					}
 				}
 			} else {
 				entry.Warnf("%d/100 random shards checking failed, punish %d%% deposit", errCount, analyser.Params.PunishPhase1Percent)
 				if analyser.Params.PunishPhase1Percent > 0 {
-					if analyser.ifNeedPunish(spr.NID, node.PoolOwner) {
-						analyser.punish(1, node.ID, analyser.Params.PunishPhase1Percent, true)
+					if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+						analyser.punish(ctx, 1, node.ID, analyser.Params.PunishPhase1Percent, true)
 					}
 				}
 			}
@@ -282,6 +228,7 @@ func (analyser *Analyser) checkDataNode(spr *SpotCheckRecord) {
 }
 
 //CheckVNI check whether vni is correct
+<<<<<<< HEAD
 func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, error) {
 	// entry := log.WithFields(log.Fields{Function: "CheckVNI", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
 	// ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
@@ -294,9 +241,13 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 	// 	return false, err
 	// }
 
+=======
+func (analyser *Analyser) CheckVNI(ctx context.Context, node *Node, spr *SpotCheckRecord) (bool, error) {
+>>>>>>> v4
 	entry := log.WithFields(log.Fields{Function: "CheckVNI", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
-	ctx, cancle := context.WithTimeout(context.Background(), time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
+	ctx, cancle := context.WithTimeout(ctx, time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
 	defer cancle()
+<<<<<<< HEAD
 	entry.Debugf("setting connect timeout to %d", analyser.Params.SpotCheckConnectTimeout)
 	ID, err := peer.Decode(node.NodeID)
 	if err != nil {
@@ -304,13 +255,22 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 	}
 	maddrs, _ := stringListToMaddrs(node.Addrs)
 	_, err = analyser.checker.lhost.ClientStore().Get(ctx, ID, maddrs)
+=======
+	entry.Debugf("setting connect timeout to %d, connecting %v", analyser.Params.SpotCheckConnectTimeout, node.Addrs)
+	req := &pbh.ConnectReq{Id: node.NodeID, Addrs: node.Addrs}
+	_, err := analyser.checker.lhost.Connect(ctx, req)
+>>>>>>> v4
 	if err != nil {
 		entry.WithError(err).Error("connecting spotchecked miner failed")
 		return false, err
 	}
 	entry.Debug("spotchecked miner connected")
+<<<<<<< HEAD
 	//defer analyser.checker.lhost.DisConnect(context.Background(), &pbh.StringMsg{Value: node.NodeID})
 	defer analyser.checker.lhost.ClientStore().Close(ID)
+=======
+	defer analyser.checker.lhost.DisConnect(ctx, &pbh.StringMsg{Value: node.NodeID})
+>>>>>>> v4
 
 	rawvni, err := base64.StdEncoding.DecodeString(spr.VNI)
 	if err != nil {
@@ -327,16 +287,19 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 	}
 	entry.Debug("protobuf message marshalled")
 	entry.Debugf("setting message-sending timeout to %d", analyser.Params.SpotCheckConnectTimeout)
-	ctx2, cancle2 := context.WithTimeout(context.Background(), time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
+	ctx2, cancle2 := context.WithTimeout(ctx, time.Second*time.Duration(analyser.Params.SpotCheckConnectTimeout))
 	defer cancle2()
 	shardData, err := analyser.checker.SendMsg(ctx2, node.NodeID, append(pb.MsgIDDownloadShardRequest.Bytes(), checkData...))
 	if err != nil {
+		if strings.ContainsAny(err.Error(), "YTFS: data not found") {
+			return false, nil
+		}
 		entry.WithError(err).Error("sending rechecking command failed")
 		return false, err
 	}
 	if len(shardData) == 0 {
 		entry.WithError(err).Error("downloading shard response is empty")
-		return false, errors.New("downloading shard response is empty")
+		return false, EmptyShardError
 	}
 	entry.Debug("rechecking command is sent to spotcheck miner")
 	var share pb.DownloadShardResponse
@@ -354,7 +317,7 @@ func (analyser *Analyser) CheckVNI(node *Node, spr *SpotCheckRecord) (bool, erro
 	return false, nil
 }
 
-func (analyser *Analyser) punish(msgType, minerID, count int32, needPunish bool) {
+func (analyser *Analyser) punish(ctx context.Context, msgType, minerID, count int32, needPunish bool) {
 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
 	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
 		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
@@ -371,56 +334,39 @@ func (analyser *Analyser) punish(msgType, minerID, count int32, needPunish bool)
 		entry.WithError(err).Error("marshaling PunishMessage failed")
 		return
 	}
-	snID := int(minerID) % len(analyser.mqClis)
-	ret := analyser.mqClis[snID].Send(fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
+	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
+	ret := analyser.nodeMgr.MqClis[snID].Send(ctx, fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
 	if !ret {
 		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
 	}
 }
 
-// func (analyser *Analyser) punish(node *Node, percent int64) (int64, error) {
-// 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: node.ID})
-// 	entry.Debugf("punishing %d deposit", percent)
-// 	pledgeData, err := analyser.eostx.GetPledgeData(uint64(node.ID))
-// 	if err != nil {
-// 		entry.WithError(err).Error("get pledge data failed")
-// 		return 0, err
-// 	}
-// 	entry.Debugf("get pledge data: %d/%d", int64(pledgeData.Deposit.Amount), int64(pledgeData.Total.Amount))
-// 	totalAsset := pledgeData.Total
-// 	leftAsset := pledgeData.Deposit
-// 	punishAsset := pledgeData.Deposit
-// 	if leftAsset.Amount == 0 {
-// 		entry.Debug("no left deposit")
-// 		return 0, nil
-// 	}
-// 	var retLeft int64 = 0
-// 	punishFee := int64(totalAsset.Amount) * percent / 100
-// 	if punishFee < int64(punishAsset.Amount) {
-// 		punishAsset.Amount = eos.Int64(punishFee)
-// 		retLeft = int64(leftAsset.Amount - punishAsset.Amount)
-// 	}
-// 	entry.Debugf("punishing %f YTA", float64(punishFee)/10000)
-// 	err = analyser.eostx.DeducePledge(uint64(node.ID), &punishAsset)
-// 	if err != nil {
-// 		entry.WithError(err).Errorf("punishing %f YTA", float64(punishFee)/10000)
-// 		return 0, err
-// 	}
-// 	entry.Infof("punished %f YTA", float64(punishFee)/10000)
-// 	return retLeft, nil
-// }
-
 //UpdateTaskStatus process error task of spotchecking
-func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) error {
+func (analyser *Analyser) UpdateTaskStatus(ctx context.Context, taskID string, invalidNode int32) error {
 	entry := log.WithFields(log.Fields{Function: "UpdateTaskStatus", TaskID: taskID, MinerID: invalidNode})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+
+	analyser.nodeMgr.rwlock.Lock()
+	node := analyser.nodeMgr.Nodes[invalidNode]
+	if node == nil {
+		analyser.nodeMgr.rwlock.Unlock()
+		return fmt.Errorf("node is invalid")
+	}
+	analyser.nodeMgr.rwlock.Unlock()
 
 	//first task can be rechecked
 	opts := new(options.FindOneAndUpdateOptions)
 	opts = opts.SetReturnDocument(options.After)
 	sprn := new(SpotCheckRecord)
-	err := collectionS.FindOneAndUpdate(context.Background(), bson.M{"_id": taskID}, bson.M{"$inc": bson.M{"dup": 1}}, opts).Decode(sprn)
+	err := collectionS.FindOneAndUpdate(ctx, bson.M{"_id": taskID}, bson.M{"$inc": bson.M{"dup": 1}}, opts).Decode(sprn)
+	entry.Tracef("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("increasing dup")
 		return err
@@ -436,13 +382,14 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	var limit int64 = 1
 	opt.Sort = bson.M{"timestamp": -1}
 	opt.Limit = &limit
-	cur, err := collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	cur, err := collectionS.Find(ctx, bson.M{"nid": invalidNode}, opt)
+	entry.Tracef("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("fetching lastest spotcheck task")
 		return err
 	}
-	defer cur.Close(context.Background())
-	if cur.Next(context.Background()) {
+	defer cur.Close(ctx)
+	if cur.Next(ctx) {
 		err := cur.Decode(lastestSpotCheck)
 		if err != nil {
 			entry.WithError(err).Errorf("decoding lastest spotcheck task")
@@ -465,13 +412,14 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	opt.Sort = bson.M{"timestamp": -1}
 	opt.Limit = &limit
 	opt.Skip = &skip
-	cur, err = collectionS.Find(context.Background(), bson.M{"nid": invalidNode}, opt)
+	cur, err = collectionS.Find(ctx, bson.M{"nid": invalidNode}, opt)
+	entry.Tracef("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Errorf("fetching last spotcheck task")
 		return err
 	}
-	defer cur.Close(context.Background())
-	if cur.Next(context.Background()) {
+	defer cur.Close(ctx)
+	if cur.Next(ctx) {
 		err := cur.Decode(lastSpotCheck)
 		if err != nil {
 			entry.WithError(err).Errorf("decoding last spotcheck task")
@@ -479,7 +427,8 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 		}
 		entry.Debug("last spotcheck task fetched")
 		if lastSpotCheck.Status == 0 {
-			_, err = collectionSN.UpdateOne(context.Background(), bson.M{"_id": invalidNode}, bson.M{"$set": bson.M{"errorCount": 0}})
+			_, err = collectionSN.UpdateOne(ctx, bson.M{"_id": invalidNode}, bson.M{"$set": bson.M{"errorCount": 0}})
+			entry.Tracef("<time trace %d>cost time 4: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 			if err != nil {
 				entry.WithError(err).Error("updating error count to 0")
 				return err
@@ -488,7 +437,8 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 		}
 	}
 	//update task status to 1(rechecking)
-	_, err = collectionS.UpdateOne(context.Background(), bson.M{"_id": taskID}, bson.M{"$set": bson.M{"status": 1}})
+	_, err = collectionS.UpdateOne(ctx, bson.M{"_id": taskID}, bson.M{"$set": bson.M{"status": 1}})
+	entry.Tracef("<time trace %d>cost time 5: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	if err != nil {
 		entry.WithError(err).Error("updating status of spotcheck task to 1")
 		return err
@@ -497,181 +447,33 @@ func (analyser *Analyser) UpdateTaskStatus(taskID string, invalidNode int32) err
 	//rechecking
 	entry.Debug("add rechecking task to executing pool")
 	analyser.pool.JobQueue <- func() {
-		analyser.checkDataNode(lastestSpotCheck)
+		analyser.checkDataNode(ctx, node, lastestSpotCheck)
 	}
+	entry.Tracef("<time trace %d>cost time 6: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	return nil
 }
 
-//getRandomVNI find one VNI by miner ID and index of shards table
-func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
-	entry := log.WithFields(log.Fields{Function: "getRandomVNI", MinerID: id})
-	collection := analyser.analysisdbClient.Database(MetaDB).Collection(Shards)
-	startTime := analyser.Params.SpotCheckStartTime
-	endTime := analyser.Params.SpotCheckEndTime
-	var limit int64 = 1
-	opt := options.FindOptions{}
-	opt.Limit = &limit
-	opt.Sort = bson.M{"_id": 1}
-	firstShard := new(Shard)
-	cur0, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
-	if err != nil {
-		entry.WithError(err).Error("find first shard failed")
-		return "", fmt.Errorf("find first shard failed: %s", err.Error())
-	}
-	defer cur0.Close(context.Background())
-	if cur0.Next(context.Background()) {
-		err := cur0.Decode(firstShard)
-		if err != nil {
-			entry.WithError(err).Error("decoding first shard failed")
-			return "", fmt.Errorf("error when decoding first shard: %s", err.Error())
-		}
-		entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
-	} else {
-		entry.Error("cannot find first shard")
-		return "", fmt.Errorf("cannot find first shard")
-	}
-	start64 := Int64ToBytes(firstShard.ID)
-	sTime := int64(BytesToInt32(start64[0:4]))
-	if sTime >= startTime {
-		startTime = sTime
-	}
-	entry.Debugf("start time of spotcheck time range is %d", startTime)
-	opt.Sort = bson.M{"_id": -1}
-	lastShard := new(Shard)
-	cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
-	if err != nil {
-		entry.WithError(err).Error("find last shard failed")
-		return "", fmt.Errorf("find last shard failed: %s", err.Error())
-	}
-	defer cur1.Close(context.Background())
-	if cur1.Next(context.Background()) {
-		err := cur1.Decode(lastShard)
-		if err != nil {
-			entry.WithError(err).Error("decoding last shard failed")
-			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
-		}
-		entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
-	} else {
-		entry.Error("cannot find last shard")
-		return "", fmt.Errorf("cannot find last shard")
-	}
-	end64 := Int64ToBytes(lastShard.ID)
-	eTime := int64(BytesToInt32(end64[0:4]))
-	if eTime <= endTime || endTime == 0 {
-		endTime = eTime
-	}
-	entry.Debugf("end time of spotcheck time range is %d", endTime)
-	if startTime >= endTime {
-		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")
-		return "", fmt.Errorf("no valid shards can be spotchecked")
-	}
-	opt.Sort = bson.M{"_id": 1}
-	delta := rand.Int63n(endTime - startTime)
-	selectedTime := startTime + delta
-	sel32 := Int32ToBytes(int32(selectedTime))
-	rand32 := rand.Uint32()
-	sel32 = append(sel32, Uint32ToBytes(rand32)...)
-	selectedID := BytesToInt64(sel32)
-	selectedShard := new(Shard)
-	cur2, err := collection.Find(context.Background(), bson.M{"nodeId": id, "_id": bson.M{"$gte": selectedID}}, &opt)
-	if err != nil {
-		entry.WithError(err).Error("finding random shard")
-		return "", fmt.Errorf("find random shard failed: %s", err.Error())
-	}
-	defer cur2.Close(context.Background())
-	if cur2.Next(context.Background()) {
-		err := cur2.Decode(selectedShard)
-		if err != nil {
-			entry.WithError(err).Error("decoding random shard")
-			return "", fmt.Errorf("error when decoding random shard: %s", err.Error())
-		}
-		entry.Debugf("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF.Data))
-	} else {
-		entry.Error("cannot find random shard")
-		return "", fmt.Errorf("cannot find random shard")
-	}
-	return base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, selectedShard.VHF.Data...)), nil
-}
-
 //GetSpotCheckList creates a spotcheck task
-func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
+func (analyser *Analyser) GetSpotCheckList(ctx context.Context) (*SpotCheckList, error) {
 	entry := log.WithFields(log.Fields{Function: "GetSpotCheckList"})
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	randtag := r.Int31()
+	st := time.Now().UnixNano()
+	defer func() {
+		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
-	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
+	//collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
 	for range [10]byte{} {
 		spotCheckList := new(SpotCheckList)
 		now := time.Now().Unix()
-		// snID := rand.Int31n(int32(analyser.SnCount))
-		// entry.Debugf("selected SN %d", snID)
-		collectionN := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
+		node, item, err := analyser.nodeMgr.GetSpotCheckTask(ctx)
+		if err != nil {
+			entry.WithError(err).Error("get spotcheck item failed")
+			continue
+		}
+		entry.Tracef("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 
-		total, err := collectionN.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
-		if err != nil {
-			entry.WithError(err).Error("calculating total count of spotcheckable miners")
-			continue
-		}
-		if total == 0 {
-			entry.Warn("total count of spotcheckable miners is 0")
-			continue
-		}
-		entry.Debugf("total count of spotcheckable miners is %d", total)
-		n := rand.Intn(int(total))
-		optionf := new(options.FindOptions)
-		skip := int64(n)
-		limit := int64(1)
-		optionf.Limit = &limit
-		optionf.Skip = &skip
-		cur, err := collectionN.Find(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
-		if err != nil {
-			entry.WithError(err).Errorf("finding random miner for spotchecking")
-			continue
-		}
-		//select spotchecked miner
-		node := new(Node)
-		if cur.Next(context.Background()) {
-			err := cur.Decode(node)
-			if err != nil {
-				entry.WithError(err).Error("decoding spotcheck miner")
-				cur.Close(context.Background())
-				continue
-			}
-			entry.Infof("miner %d is to be spotchecked", node.ID)
-		}
-		cur.Close(context.Background())
-		//check spotcheck node
-		scNode := new(Node)
-		err = collectionSN.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(scNode)
-		if err == nil && scNode.Status == 2 {
-			entry.Warnf("miner %d is under rebuilding", scNode.ID)
-			continue
-		}
-		//check lastest spotcheck
-		lastSpotCheck := new(SpotCheckRecord)
-		optionf = new(options.FindOptions)
-		optionf.Sort = bson.M{"timestamp": -1}
-		optionf.Limit = &limit
-		cur, err = collectionS.Find(context.Background(), bson.M{"nid": node.ID}, optionf)
-		if err != nil {
-			entry.WithError(err).Errorf("fetching lastest spotcheck task of miner %d", node.ID)
-			continue
-		}
-		if cur.Next(context.Background()) {
-			err := cur.Decode(lastSpotCheck)
-			if err != nil {
-				entry.WithError(err).Errorf("decoding lastest spotcheck task of miner %d", node.ID)
-				cur.Close(context.Background())
-				continue
-			}
-			entry.Debugf("found lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
-			if (now-lastSpotCheck.Timestamp < analyser.Params.SpotCheckInterval*60/2) || lastSpotCheck.Status == 1 {
-				entry.Warnf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
-				cur.Close(context.Background())
-				continue
-			}
-		}
-
-		cur.Close(context.Background())
-		//select random shardspotCheckTask := new(SpotCheckTask)
 		spotCheckTask := new(SpotCheckTask)
 		spotCheckTask.ID = node.ID
 		spotCheckTask.NodeID = node.NodeID
@@ -681,31 +483,18 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 		} else {
 			spotCheckTask.Addr = analyser.CheckPublicAddr(node.Addrs)
 		}
-		entry.Debugf("selecting random shard of miner %d", node.ID)
-		spotCheckTask.VNI, err = analyser.getRandomVNI(node.ID)
-		if err != nil {
-			entry.WithError(err).Errorf("selecting random shard of miner %d", node.ID)
-			continue
-		}
-		entry.Infof("selected random shard of miner %d: %s", node.ID, spotCheckTask.VNI)
+		entry.Debugf("selecting random shard of miner %d, address is %s", node.ID, spotCheckTask.Addr)
+		spotCheckTask.VNI = item.CheckShard
 		spotCheckList.TaskID = primitive.NewObjectID()
 		spotCheckList.Timestamp = now
 		spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
 
-		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, Status: 0, Timestamp: spotCheckList.Timestamp, Dup: 0}
-		_, err = collectionS.InsertOne(context.Background(), spr)
+		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, ExtraShards: item.ExtraShards, Status: 0, Timestamp: spotCheckList.Timestamp, Dup: 0}
+		_, err = collectionS.InsertOne(ctx, spr)
+		entry.Tracef("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("inserting spotcheck record of miner %d", node.ID)
 			continue
-		}
-		node.ErrorCount = 0
-		_, err = collectionSN.InsertOne(context.Background(), node)
-		if err != nil {
-			errstr := err.Error()
-			if !strings.ContainsAny(errstr, "duplicate key error") {
-				entry.WithError(err).Errorf("inserting miner %d to SpotCheckNode table", node.ID)
-				continue
-			}
 		}
 		return spotCheckList, nil
 	}
@@ -716,21 +505,8 @@ func (analyser *Analyser) GetSpotCheckList() (*SpotCheckList, error) {
 //IsNodeSelected check if node is selected for spotchecking
 func (analyser *Analyser) IsNodeSelected() (bool, error) {
 	entry := log.WithFields(log.Fields{Function: "IsNodeSelected"})
-	// collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	// c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	// if err != nil {
-	// 	entry.WithError(err).Error("calculating count of spotcheckable miners")
-	// 	return false, errors.New("error when get count of spotcheckable miners")
-	// }
-	// entry.Debugf("count of spotcheckable miners is %d", c)
-	// d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-	// if err != nil {
-	// 	entry.WithError(err).Error("calculating count of spotcheck-executing miners")
-	// 	return false, errors.New("error when get count of spotcheck-executing miners")
-	// }
-	// entry.Debugf("count of spotcheck-executing miners is %d", d)
-	c := atomic.LoadInt64(&analyser.c)
-	d := atomic.LoadInt64(&analyser.d)
+	c := atomic.LoadInt64(&analyser.nodeMgr.c)
+	d := atomic.LoadInt64(&analyser.nodeMgr.d)
 	if c == 0 || d == 0 {
 		entry.Warn("count of spotcheckable miners or count of spotcheck-executing miners is 0")
 		return false, nil
