@@ -1,6 +1,9 @@
 package ytanalysis
 
 import (
+	"errors"
+
+	proto "github.com/golang/protobuf/proto"
 	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -12,6 +15,8 @@ const (
 	PunishMessage       //PunishMessage message type
 )
 
+var NoValError = errors.New("value not found")
+
 const (
 	//Function tag
 	Function = "function"
@@ -19,12 +24,23 @@ const (
 	TaskID = "taskID"
 	//MinerID tag
 	MinerID = "minerID"
+	//BlockID tag
+	BlockID = "blockID"
+	//ShardID tag
+	ShardID = "shardID"
 	//ShardHash tag
 	ShardHash = "vni"
 	//PoolOwner tag
 	PoolOwner = "poolOwner"
 	//Element tag
 	Element = "element"
+)
+
+const (
+	PFX_BLOCKS     = "blocks"
+	PFX_SHARDS     = "shards"
+	PFX_SHARDNODES = "snodes"
+	PFX_CHECKPOINT = "checkpoint"
 )
 
 // Node instance
@@ -172,12 +188,21 @@ type VNI struct {
 	VNI []byte `bson:"vni"`
 }
 
+//Block block struct
+type Block struct {
+	ID   int64 `bson:"_id" db:"id"`
+	VNF  int32 `bson:"VNF" db:"vnf"`
+	AR   int32 `bson:"AR" db:"ar"`
+	SNID int32 `bson:"snId" db:"snid"`
+}
+
 //Shard shard struct
 type Shard struct {
 	ID      int64  `bson:"_id" db:"id"`
 	BlockID int64  `bson:"blockId" db:"bid"`
 	NodeID  int32  `bson:"nodeId" db:"nid"`
 	VHF     []byte `bson:"VHF" db:"vhf"`
+	NodeID2 int32  `bson:"nodeId2" db:"nid2"`
 }
 
 //PoolWeight infomation of pool
@@ -435,4 +460,74 @@ func ConvertSpotCheckListsToSpotCheckListsMsg(spotCheckLists []*SpotCheckList) [
 		spotCheckListMsgs[i] = s.Convert()
 	}
 	return spotCheckListMsgs
+}
+
+// Convert convert Block strcut to BlockMsg
+func (block *Block) Convert() *pb.BlockMsg {
+	return &pb.BlockMsg{
+		Id:   block.ID,
+		Vnf:  block.VNF,
+		Ar:   block.AR,
+		SnID: block.SNID,
+	}
+}
+
+// Fillby convert BlockMsg to Block struct
+func (block *Block) Fillby(msg *pb.BlockMsg) {
+	block.ID = msg.Id
+	block.VNF = msg.Vnf
+	block.AR = msg.Ar
+	block.SNID = msg.SnID
+}
+
+// FillBytes convert bytes to Block strcut
+func (block *Block) FillBytes(buf []byte) error {
+	blockMsg := new(pb.BlockMsg)
+	err := proto.Unmarshal(buf, blockMsg)
+	if err != nil {
+		return err
+	}
+	block.Fillby(blockMsg)
+	return nil
+}
+
+// ConvertBytes convert Block struct to bytes
+func (block *Block) ConvertBytes() ([]byte, error) {
+	return proto.Marshal(block.Convert())
+}
+
+// Convert convert Shard strcut to ShardMsg
+func (shard *Shard) Convert() *pb.ShardMsg {
+	return &pb.ShardMsg{
+		Id:      shard.ID,
+		NodeID:  shard.NodeID,
+		Vhf:     shard.VHF,
+		BlockID: shard.BlockID,
+		NodeID2: shard.NodeID2,
+	}
+}
+
+// Fillby convert ShardMsg to Shard struct
+func (shard *Shard) Fillby(msg *pb.ShardMsg) {
+	shard.ID = msg.Id
+	shard.NodeID = msg.NodeID
+	shard.VHF = msg.Vhf
+	shard.BlockID = msg.BlockID
+	shard.NodeID2 = msg.NodeID2
+}
+
+// FillBytes convert bytes to Shard strcut
+func (shard *Shard) FillBytes(buf []byte) error {
+	shardMsg := new(pb.ShardMsg)
+	err := proto.Unmarshal(buf, shardMsg)
+	if err != nil {
+		return err
+	}
+	shard.Fillby(shardMsg)
+	return nil
+}
+
+// ConvertBytes convert Shard struct to bytes
+func (shard *Shard) ConvertBytes() ([]byte, error) {
+	return proto.Marshal(shard.Convert())
 }

@@ -5,12 +5,8 @@ const (
 	BindAddrField = "bind-addr"
 	//AnalysisDBURLField Field name of analysisdb-url config
 	AnalysisDBURLField = "analysisdb-url"
-	//SyncDBURLField Field name of syncdb-url config
-	SyncDBURLField = "syncdb-url"
-	//MaxOpenConnsField field name of max-open-conns
-	MaxOpenConnsField = "max-open-conns"
-	//MaxIdleConnsField field name of max-idle-conns
-	MaxIdleConnsField = "max-idle-conns"
+	//PDURLsField Field name of pd-urls config
+	PDURLsField = "pd-urls"
 
 	//AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
 	AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
@@ -91,9 +87,7 @@ const (
 type Config struct {
 	BindAddr      string           `mapstructure:"bind-addr"`
 	AnalysisDBURL string           `mapstructure:"analysisdb-url"`
-	SyncDBURL     string           `mapstructure:"syncdb-url"`
-	MaxOpenConns  int              `mapstructure:"max-open-conns"`
-	MaxIdleConns  int              `mapstructure:"max-idle-conns"`
+	PDURLs        []string         `mapstructure:"pd-urls"`
 	AuraMQ        *AuraMQConfig    `mapstructure:"auramq"`
 	MinerStat     *MinerStatConfig `mapstructure:"miner-stat"`
 	Logger        *LogConfig       `mapstructure:"logger"`

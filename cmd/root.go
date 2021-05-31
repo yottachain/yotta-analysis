@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 		// }
 		initLog(config)
 		ctx := context.Background()
-		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.SyncDBURL, config.MaxOpenConns, config.MaxIdleConns, config.AuraMQ, config.MinerStat, config.MiscConfig)
+		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.AuraMQ, config.MinerStat, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
@@ -153,12 +153,8 @@ var (
 	DefaultBindAddr string = ":8080"
 	//DefaultAnalysisDBURL default value of AnalysisDBURL
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
-	//DefaultSyncDBURL default value of SyncDBURL
-	DefaultSyncDBURL string = "root:root@tcp(127.0.0.1:3306)/metabase"
-	//DefaultMaxOpenConns default value of MaxOpenConns
-	DefaultMaxOpenConns int = 100
-	//DefaultMaxIdleConns default value of MaxIdleConns
-	DefaultMaxIdleConns int = 200
+	//DefaultPDURLs default value of PDURLs
+	DefaultPDURLs []string = []string{"127.0.0.1:2379"}
 
 	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
 	DefaultAuramqSubscriberBufferSize = 1024
@@ -241,12 +237,8 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.BindAddrField, rootCmd.PersistentFlags().Lookup(ytanalysis.BindAddrField))
 	rootCmd.PersistentFlags().String(ytanalysis.AnalysisDBURLField, DefaultAnalysisDBURL, "mongoDB URL of analysis database")
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
-	rootCmd.PersistentFlags().String(ytanalysis.SyncDBURLField, DefaultSyncDBURL, "mongoDB URL of sync database")
-	viper.BindPFlag(ytanalysis.SyncDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.SyncDBURLField))
-	rootCmd.PersistentFlags().Int(ytanalysis.MaxOpenConnsField, DefaultMaxOpenConns, "max open connections of TiDB")
-	viper.BindPFlag(ytanalysis.MaxOpenConnsField, rootCmd.PersistentFlags().Lookup(ytanalysis.MaxOpenConnsField))
-	rootCmd.PersistentFlags().Int(ytanalysis.MaxIdleConnsField, DefaultMaxIdleConns, "max idle connections of TiDB")
-	viper.BindPFlag(ytanalysis.MaxIdleConnsField, rootCmd.PersistentFlags().Lookup(ytanalysis.MaxIdleConnsField))
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.PDURLsField, DefaultPDURLs, "URLs of PD")
+	viper.BindPFlag(ytanalysis.PDURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.PDURLsField))
 	//AuraMQ config
 	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
 	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))

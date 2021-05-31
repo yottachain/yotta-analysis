@@ -21,29 +21,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var EmptyShardError = errors.New("downloading shard response is empty")
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
-
-// func (analyser *Analyser) calculateCD() error {
-// 	entry := log.WithFields(log.Fields{Function: "CalculateCD"})
-// 	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-// 	c, err := collection.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "status": 1, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-// 	if err != nil {
-// 		entry.WithError(err).Error("calculating count of spotcheckable miners")
-// 		return errors.New("error when get count of spotcheckable miners")
-// 	}
-// 	atomic.StoreInt64(&analyser.c, c)
-// 	entry.Debugf("count of spotcheckable miners is %d", c)
-// 	d, err := collection.CountDocuments(context.Background(), bson.M{"status": 1, "timestamp": bson.M{"$gt": time.Now().Unix() - IntervalTime*analyser.Params.AvaliableNodeTimeGap}, "version": bson.M{"$gte": analyser.Params.MinerVersionThreshold}})
-// 	if err != nil {
-// 		entry.WithError(err).Error("calculating count of spotcheck-executing miners")
-// 		return errors.New("error when get count of spotcheck-executing miners")
-// 	}
-// 	atomic.StoreInt64(&analyser.d, d)
-// 	entry.Debugf("count of spotcheck-executing miners is %d", d)
-// 	return nil
-// }
 
 //StartRecheck starting recheck process
 func (analyser *Analyser) StartRecheck(ctx context.Context) {
@@ -68,15 +50,6 @@ func (analyser *Analyser) StartRecheck(ctx context.Context) {
 			entry.Debug("deleted expired spotcheck tasks")
 		}
 	}()
-	// go func() {
-	// 	for {
-	// 		err := analyser.calculateCD()
-	// 		if err != nil {
-	// 			entry.Warnf("calculate c & d failed")
-	// 		}
-	// 		time.Sleep(time.Duration(3) * time.Minute)
-	// 	}
-	// }()
 }
 
 func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
@@ -119,21 +92,6 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 	entry.Info("task is under rechecking")
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
-	// node := new(Node)
-	// err := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab).FindOne(ctx, bson.M{"_id": spr.NID}).Decode(node)
-	// if err != nil {
-	// 	entry.WithError(err).Error("decoding miner info which performing rechecking")
-	// 	defer func() {
-	// 		_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-	// 		if err != nil {
-	// 			entry.WithError(err).Error("updating task status to 0")
-	// 		} else {
-	// 			entry.Debug("task status is updated to 0")
-	// 		}
-	// 	}()
-	// 	return
-	// }
-	// entry.Debug("decoded miner info")
 	scNode := new(Node)
 	opts := new(options.FindOneAndUpdateOptions)
 	opts = opts.SetReturnDocument(options.After)
@@ -196,19 +154,6 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 		for j := 0; i < 100; j++ {
 			i++
 			spr.VNI = spr.ExtraShards[j]
-			// spr.VNI, err = analyser.getRandomVNI(node.ID)
-			// if err != nil {
-			// 	entry.WithError(err).Errorf("get random shard %d failed", i)
-			// 	defer func() {
-			// 		_, err := collectionS.UpdateOne(context.Background(), bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-			// 		if err != nil {
-			// 			entry.WithError(err).Error("updating task status to 0")
-			// 		} else {
-			// 			entry.Debug("task status is updated to 0")
-			// 		}
-			// 	}()
-			// 	return
-			// }
 			entry.Debugf("generated random shard %d: %s", i, spr.VNI)
 			b, err := analyser.CheckVNI(ctx, node, spr)
 			if err != nil {
@@ -324,7 +269,7 @@ func (analyser *Analyser) CheckVNI(ctx context.Context, node *Node, spr *SpotChe
 	}
 	if len(shardData) == 0 {
 		entry.WithError(err).Error("downloading shard response is empty")
-		return false, errors.New("downloading shard response is empty")
+		return false, EmptyShardError
 	}
 	entry.Debug("rechecking command is sent to spotcheck miner")
 	var share pb.DownloadShardResponse
@@ -365,38 +310,6 @@ func (analyser *Analyser) punish(ctx context.Context, msgType, minerID, count in
 		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
 	}
 }
-
-// func (analyser *Analyser) punish(node *Node, percent int64) (int64, error) {
-// 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: node.ID})
-// 	entry.Debugf("punishing %d deposit", percent)
-// 	pledgeData, err := analyser.eostx.GetPledgeData(uint64(node.ID))
-// 	if err != nil {
-// 		entry.WithError(err).Error("get pledge data failed")
-// 		return 0, err
-// 	}
-// 	entry.Debugf("get pledge data: %d/%d", int64(pledgeData.Deposit.Amount), int64(pledgeData.Total.Amount))
-// 	totalAsset := pledgeData.Total
-// 	leftAsset := pledgeData.Deposit
-// 	punishAsset := pledgeData.Deposit
-// 	if leftAsset.Amount == 0 {
-// 		entry.Debug("no left deposit")
-// 		return 0, nil
-// 	}
-// 	var retLeft int64 = 0
-// 	punishFee := int64(totalAsset.Amount) * percent / 100
-// 	if punishFee < int64(punishAsset.Amount) {
-// 		punishAsset.Amount = eos.Int64(punishFee)
-// 		retLeft = int64(leftAsset.Amount - punishAsset.Amount)
-// 	}
-// 	entry.Debugf("punishing %f YTA", float64(punishFee)/10000)
-// 	err = analyser.eostx.DeducePledge(uint64(node.ID), &punishAsset)
-// 	if err != nil {
-// 		entry.WithError(err).Errorf("punishing %f YTA", float64(punishFee)/10000)
-// 		return 0, err
-// 	}
-// 	entry.Infof("punished %f YTA", float64(punishFee)/10000)
-// 	return retLeft, nil
-// }
 
 //UpdateTaskStatus process error task of spotchecking
 func (analyser *Analyser) UpdateTaskStatus(ctx context.Context, taskID string, invalidNode int32) error {
@@ -510,106 +423,6 @@ func (analyser *Analyser) UpdateTaskStatus(ctx context.Context, taskID string, i
 	return nil
 }
 
-//getRandomVNI find one VNI by miner ID and index of shards table
-// func (analyser *Analyser) getRandomVNI(id int32) (string, error) {
-// 	entry := log.WithFields(log.Fields{Function: "getRandomVNI", MinerID: id})
-// 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-// 	randtag := r.Int31()
-// 	st := time.Now().UnixNano()
-// 	defer func() {
-// 		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-// 	}()
-// 	collection := analyser.analysisdbClient.Database(MetaDB).Collection(Shards)
-// 	startTime := analyser.Params.SpotCheckStartTime
-// 	endTime := analyser.Params.SpotCheckEndTime
-// 	var limit int64 = 1
-// 	opt := options.FindOptions{}
-// 	opt.Limit = &limit
-// 	opt.Sort = bson.M{"_id": 1}
-// 	firstShard := new(Shard)
-// 	cur0, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
-// 	entry.Debugf("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-// 	if err != nil {
-// 		entry.WithError(err).Error("find first shard failed")
-// 		return "", fmt.Errorf("find first shard failed: %s", err.Error())
-// 	}
-// 	defer cur0.Close(context.Background())
-// 	if cur0.Next(context.Background()) {
-// 		err := cur0.Decode(firstShard)
-// 		if err != nil {
-// 			entry.WithError(err).Error("decoding first shard failed")
-// 			return "", fmt.Errorf("error when decoding first shard: %s", err.Error())
-// 		}
-// 		entry.Debugf("found start shard: %d -> %s", firstShard.ID, hex.EncodeToString(firstShard.VHF.Data))
-// 	} else {
-// 		entry.Error("cannot find first shard")
-// 		return "", fmt.Errorf("cannot find first shard")
-// 	}
-// 	start64 := Int64ToBytes(firstShard.ID)
-// 	sTime := int64(BytesToInt32(start64[0:4]))
-// 	if sTime >= startTime {
-// 		startTime = sTime
-// 	}
-// 	entry.Debugf("start time of spotcheck time range is %d", startTime)
-// 	opt.Sort = bson.M{"_id": -1}
-// 	lastShard := new(Shard)
-// 	cur1, err := collection.Find(context.Background(), bson.M{"nodeId": id}, &opt)
-// 	entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-// 	if err != nil {
-// 		entry.WithError(err).Error("find last shard failed")
-// 		return "", fmt.Errorf("find last shard failed: %s", err.Error())
-// 	}
-// 	defer cur1.Close(context.Background())
-// 	if cur1.Next(context.Background()) {
-// 		err := cur1.Decode(lastShard)
-// 		if err != nil {
-// 			entry.WithError(err).Error("decoding last shard failed")
-// 			return "", fmt.Errorf("error when decoding last shard: %s", err.Error())
-// 		}
-// 		entry.Debugf("found end shard: %d -> %s", lastShard.ID, hex.EncodeToString(lastShard.VHF.Data))
-// 	} else {
-// 		entry.Error("cannot find last shard")
-// 		return "", fmt.Errorf("cannot find last shard")
-// 	}
-// 	end64 := Int64ToBytes(lastShard.ID)
-// 	eTime := int64(BytesToInt32(end64[0:4]))
-// 	if eTime <= endTime || endTime == 0 {
-// 		endTime = eTime
-// 	}
-// 	entry.Debugf("end time of spotcheck time range is %d", endTime)
-// 	if startTime >= endTime {
-// 		entry.Error("start time is bigger than end time, no valid shards can be spotchecked")
-// 		return "", fmt.Errorf("no valid shards can be spotchecked")
-// 	}
-// 	opt.Sort = bson.M{"_id": 1}
-// 	delta := rand.Int63n(endTime - startTime)
-// 	selectedTime := startTime + delta
-// 	sel32 := Int32ToBytes(int32(selectedTime))
-// 	rand32 := rand.Uint32()
-// 	sel32 = append(sel32, Uint32ToBytes(rand32)...)
-// 	selectedID := BytesToInt64(sel32)
-// 	selectedShard := new(Shard)
-// 	cur2, err := collection.Find(context.Background(), bson.M{"nodeId": id, "_id": bson.M{"$gte": selectedID}}, &opt)
-// 	entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-// 	if err != nil {
-// 		entry.WithError(err).Error("finding random shard")
-// 		return "", fmt.Errorf("find random shard failed: %s", err.Error())
-// 	}
-// 	defer cur2.Close(context.Background())
-// 	if cur2.Next(context.Background()) {
-// 		err := cur2.Decode(selectedShard)
-// 		if err != nil {
-// 			entry.WithError(err).Error("decoding random shard")
-// 			return "", fmt.Errorf("error when decoding random shard: %s", err.Error())
-// 		}
-// 		entry.Debugf("found random shard: %d -> %s", selectedShard.ID, hex.EncodeToString(selectedShard.VHF.Data))
-// 	} else {
-// 		entry.Error("cannot find random shard")
-// 		return "", fmt.Errorf("cannot find random shard")
-// 	}
-// 	return base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, selectedShard.VHF.Data...)), nil
-// }
-
 //GetSpotCheckList creates a spotcheck task
 func (analyser *Analyser) GetSpotCheckList(ctx context.Context) (*SpotCheckList, error) {
 	entry := log.WithFields(log.Fields{Function: "GetSpotCheckList"})
@@ -629,82 +442,8 @@ func (analyser *Analyser) GetSpotCheckList(ctx context.Context) (*SpotCheckList,
 			entry.WithError(err).Error("get spotcheck item failed")
 			continue
 		}
-		// snID := rand.Int31n(int32(analyser.SnCount))
-		// entry.Debugf("selected SN %d", snID)
-		// collectionN := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-
-		// total, err := collectionN.CountDocuments(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1})
 		entry.Tracef("<time trace %d>cost time 1: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err != nil {
-		// 	entry.WithError(err).Error("calculating total count of spotcheckable miners")
-		// 	continue
-		// }
-		// if total == 0 {
-		// 	entry.Warn("total count of spotcheckable miners is 0")
-		// 	continue
-		// }
-		// entry.Debugf("total count of spotcheckable miners is %d", total)
-		// n := rand.Intn(int(total))
-		// optionf := new(options.FindOptions)
-		// skip := int64(n)
-		// limit := int64(1)
-		// optionf.Limit = &limit
-		// optionf.Skip = &skip
-		// cur, err := collectionN.Find(context.Background(), bson.M{"usedSpace": bson.M{"$gt": 0}, "assignedSpace": bson.M{"$gt": 0}, "status": 1}, optionf)
-		// entry.Debugf("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err != nil {
-		// 	entry.WithError(err).Errorf("finding random miner for spotchecking")
-		// 	continue
-		// }
-		// //select spotchecked miner
-		// node := new(Node)
-		// if cur.Next(context.Background()) {
-		// 	err := cur.Decode(node)
-		// 	if err != nil {
-		// 		entry.WithError(err).Error("decoding spotcheck miner")
-		// 		cur.Close(context.Background())
-		// 		continue
-		// 	}
-		// 	entry.Infof("miner %d is to be spotchecked", node.ID)
-		// }
-		// cur.Close(context.Background())
-		//check spotcheck node
-		// scNode := new(Node)
-		// err = collectionSN.FindOne(context.Background(), bson.M{"_id": node.ID}).Decode(scNode)
-		// entry.Debugf("<time trace %d>cost time 3: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err == nil && scNode.Status == 2 {
-		// 	entry.Warnf("miner %d is under rebuilding", scNode.ID)
-		// 	continue
-		// }
-		//check lastest spotcheck
-		// lastSpotCheck := new(SpotCheckRecord)
-		// optionf := new(options.FindOptions)
-		// optionf.Sort = bson.M{"timestamp": -1}
-		// limit := int64(1)
-		// optionf.Limit = &limit
-		// cur, err := collectionS.Find(context.Background(), bson.M{"nid": node.ID}, optionf)
-		// entry.Debugf("<time trace %d>cost time 4: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err != nil {
-		// 	entry.WithError(err).Errorf("fetching lastest spotcheck task of miner %d", node.ID)
-		// 	continue
-		// }
-		// if cur.Next(context.Background()) {
-		// 	err := cur.Decode(lastSpotCheck)
-		// 	if err != nil {
-		// 		entry.WithError(err).Errorf("decoding lastest spotcheck task of miner %d", node.ID)
-		// 		cur.Close(context.Background())
-		// 		continue
-		// 	}
-		// 	entry.Debugf("found lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
-		// 	if (now-lastSpotCheck.Timestamp < analyser.Params.SpotCheckInterval*60/2) || lastSpotCheck.Status == 1 {
-		// 		entry.Warnf("conflict with lastest spotcheck task of miner %d: %s", node.ID, lastSpotCheck.TaskID)
-		// 		cur.Close(context.Background())
-		// 		continue
-		// 	}
-		// }
 
-		// cur.Close(context.Background())
-		//select random shardspotCheckTask := new(SpotCheckTask)
 		spotCheckTask := new(SpotCheckTask)
 		spotCheckTask.ID = node.ID
 		spotCheckTask.NodeID = node.NodeID
@@ -716,34 +455,17 @@ func (analyser *Analyser) GetSpotCheckList(ctx context.Context) (*SpotCheckList,
 		}
 		entry.Debugf("selecting random shard of miner %d, address is %s", node.ID, spotCheckTask.Addr)
 		spotCheckTask.VNI = item.CheckShard
-		//entry.Debugf("<time trace %d>cost time 5: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err != nil {
-		// 	entry.WithError(err).Errorf("selecting random shard of miner %d", node.ID)
-		// 	continue
-		// }
-		//entry.Infof("selected random shard of miner %d: %s", node.ID, spotCheckTask.VNI)
 		spotCheckList.TaskID = primitive.NewObjectID()
 		spotCheckList.Timestamp = now
 		spotCheckList.TaskList = append(spotCheckList.TaskList, spotCheckTask)
 
 		spr := &SpotCheckRecord{TaskID: spotCheckList.TaskID.Hex(), NID: spotCheckTask.ID, VNI: spotCheckTask.VNI, ExtraShards: item.ExtraShards, Status: 0, Timestamp: spotCheckList.Timestamp, Dup: 0}
-		//_, err = collectionS.InsertOne(context.Background(), bson.M{"_id": spotCheckList.TaskID.Hex(), "nid": spotCheckTask.ID, "vni": spotCheckTask.VNI, "extraShards": item.ExtraShards, "status": 0, "timestamp": spotCheckList.Timestamp, "dup": 0})
 		_, err = collectionS.InsertOne(ctx, spr)
 		entry.Tracef("<time trace %d>cost time 2: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 		if err != nil {
 			entry.WithError(err).Errorf("inserting spotcheck record of miner %d", node.ID)
 			continue
 		}
-		// node.ErrorCount = 0
-		// _, err = collectionSN.InsertOne(context.Background(), node)
-		// entry.Debugf("<time trace %d>cost time 7: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
-		// if err != nil {
-		// 	errstr := err.Error()
-		// 	if !strings.ContainsAny(errstr, "duplicate key error") {
-		// 		entry.WithError(err).Errorf("inserting miner %d to SpotCheckNode table", node.ID)
-		// 		continue
-		// 	}
-		// }
 		return spotCheckList, nil
 	}
 	entry.Warn("no miners can be spotchecked")

@@ -4,96 +4,54 @@ import (
 	"context"
 	"net/http"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/ivpusic/grpool"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/tikv/client-go/config"
+	"github.com/tikv/client-go/rawkv"
 )
 
 //Analyser analyser
 type Analyser struct {
-	//clients          []*mongo.Client
 	nodeMgr          *NodeManager
 	analysisdbClient *mongo.Client
 	httpCli          *http.Client
 	minerStat        *MinerStatConfig
-	//dbnameIndexed    bool
-	// eostx   *eostx.EosTX
-	checker *Host
-	//SnCount          int64
-	Params *MiscConfig
-	pool   *grpool.Pool
-	//mqClis map[int]*ytsync.Service
-	// c      int64
-	// d      int64
+	checker          *Host
+	Params           *MiscConfig
+	pool             *grpool.Pool
 }
 
 //New create new analyser instance
-func New(ctx context.Context, analysisDBURL, syncDBURL string, maxOpenConns, maxIdelConns int, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL string, pdURLs []string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
 	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
 		entry.WithError(err).Errorf("creating analysisDB client failed: %s", analysisDBURL)
 		return nil, err
 	}
-	syncdbClient, err := sqlx.ConnectContext(ctx, "mysql", syncDBURL)
+	tikvCli, err := rawkv.NewClient(ctx, pdURLs, config.Default())
 	if err != nil {
-		entry.WithError(err).Errorf("creating syncDB client failed: %s", syncDBURL)
+		entry.WithError(err).Errorf("creating tikv client failed: %v", pdURLs)
 		return nil, err
 	}
-	syncdbClient.SetMaxOpenConns(maxOpenConns)
-	syncdbClient.SetMaxIdleConns(maxIdelConns)
 
 	entry.Infof("created syncDB client: %s", analysisDBURL)
-	taskManager := NewTaskManager(syncdbClient, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
+	taskManager := NewTaskManager(tikvCli, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
 	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)
 	if err != nil {
 		entry.WithError(err).Error("creating node manager failed")
 		return nil, err
 	}
 	entry.Info("created node manager")
-	// etx, err := eostx.NewInstance(eosURL, bpAccount, bpPrivkey, contractOwnerM, contractOwnerD, shadowAccount)
-	// if err != nil {
-	// 	entry.WithError(err).Errorf("creating EOS client failed: %s", eosURL)
-	// 	return nil, err
-	// }
-	// entry.Infof("created EOS client: %s", eosURL)
 	host, err := NewHost()
 	if err != nil {
 		entry.WithError(err).Error("creating new host failed")
 		return nil, err
 	}
 	entry.Info("creating host successful")
-	// pool := grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)
-	// callback := func(msg *msg.Message) {
-	// 	if msg.GetType() == auramq.BROADCAST {
-	// 		if msg.GetDestination() == mqconf.MinerSyncTopic {
-	// 			pool.JobQueue <- func() {
-	// 				nodemsg := new(pb.NodeMsg)
-	// 				err := proto.Unmarshal(msg.Content, nodemsg)
-	// 				if err != nil {
-	// 					entry.WithError(err).Error("decoding nodeMsg failed")
-	// 					return
-	// 				}
-	// 				node := new(Node)
-	// 				node.Fillby(nodemsg)
-	// 				syncNode(analysisdbClient, node, conf.ExcludeAddrPrefix)
-	// 			}
-	// 		}
-	// 	}
-	// }
-	// m, err := ytsync.StartSync(mqconf.SubscriberBufferSize, mqconf.PingWait, mqconf.ReadWait, mqconf.WriteWait, mqconf.MinerSyncTopic, mqconf.AllSNURLs, callback, mqconf.Account, mqconf.PrivateKey, mqconf.ClientID)
-	// if err != nil {
-	// 	entry.WithError(err).Error("creating mq clients map failed")
-	// 	return nil, err
-	// }
 	analyser := &Analyser{nodeMgr: nodeManager, analysisdbClient: analysisdbClient, httpCli: &http.Client{}, minerStat: msConfig, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
-	// err = analyser.calculateCD()
-	// if err != nil {
-	// 	entry.WithError(err).Error("calculate c & d failed")
-	// 	return nil, err
-	// }
 	return analyser, nil
 }
