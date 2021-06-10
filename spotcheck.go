@@ -96,7 +96,7 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 	opts := new(options.FindOneAndUpdateOptions)
 	opts = opts.SetReturnDocument(options.After)
 	entry.Debug("checking shard")
-	b, err := analyser.CheckVNI(ctx, node, spr)
+	_, err := analyser.CheckVNI(ctx, node, spr)
 	if err != nil {
 		entry.WithError(err).Warn("checking shard")
 		err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
@@ -137,16 +137,16 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 			}
 		}()
 	} else {
-		if b {
-			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-			if err != nil {
-				entry.WithError(err).Error("updating task status to 0")
-			} else {
-				entry.Info("rechecking shard successful")
-			}
-			analyser.punish(ctx, int32(0), node.ID, int32(0), false)
-			return
+		//if b {
+		_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+		if err != nil {
+			entry.WithError(err).Error("updating task status to 0")
+		} else {
+			entry.Info("rechecking shard successful")
 		}
+		analyser.punish(ctx, int32(0), node.ID, int32(0), false)
+		return
+		//}
 		// entry.Info("rechecking shard failed, checking 100 more shards")
 		// i := 0
 		// var errCount int64 = 0
