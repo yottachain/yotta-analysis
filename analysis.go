@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
+	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/tikv/client-go/config"
 	"github.com/tikv/client-go/rawkv"
 )
@@ -17,6 +18,7 @@ import (
 type Analyser struct {
 	nodeMgr          *NodeManager
 	analysisdbClient *mongo.Client
+	esClient         *elasticsearch.Client
 	httpCli          *http.Client
 	minerStat        *MinerStatConfig
 	checker          *Host
@@ -25,20 +27,31 @@ type Analyser struct {
 }
 
 //New create new analyser instance
-func New(ctx context.Context, analysisDBURL string, pdURLs []string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL string, pdURLs, esURLs []string, esUserName, esPassword string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
 	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
 		entry.WithError(err).Errorf("creating analysisDB client failed: %s", analysisDBURL)
 		return nil, err
 	}
+	entry.Infof("created analysisDB client: %s", analysisDBURL)
 	tikvCli, err := rawkv.NewClient(ctx, pdURLs, config.Default())
 	if err != nil {
 		entry.WithError(err).Errorf("creating tikv client failed: %v", pdURLs)
 		return nil, err
 	}
+	entry.Infof("created syncDB client: %v", pdURLs)
+	config := elasticsearch.Config{
+		Addresses: esURLs,
+		Username:  esUserName,
+		Password:  esPassword,
+	}
+	esClient, err := elasticsearch.NewClient(config)
+	if err != nil {
+		entry.WithError(err).Errorf("creating es client failed: %v", esURLs)
+		return nil, err
+	}
 
-	entry.Infof("created syncDB client: %s", analysisDBURL)
 	taskManager := NewTaskManager(tikvCli, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
 	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)
 	if err != nil {
@@ -52,6 +65,6 @@ func New(ctx context.Context, analysisDBURL string, pdURLs []string, mqconf *Aur
 		return nil, err
 	}
 	entry.Info("creating host successful")
-	analyser := &Analyser{nodeMgr: nodeManager, analysisdbClient: analysisdbClient, httpCli: &http.Client{}, minerStat: msConfig, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
+	analyser := &Analyser{nodeMgr: nodeManager, analysisdbClient: analysisdbClient, esClient: esClient, httpCli: &http.Client{}, minerStat: msConfig, checker: host, Params: conf, pool: grpool.NewPool(conf.RecheckingPoolLength, conf.RecheckingQueueLength)}
 	return analyser, nil
 }

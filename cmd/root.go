@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 		// }
 		initLog(config)
 		ctx := context.Background()
-		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.AuraMQ, config.MinerStat, config.MiscConfig)
+		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.ESURLs, config.ESUserName, config.ESPassword, config.AuraMQ, config.MinerStat, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
@@ -155,6 +155,12 @@ var (
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
 	//DefaultPDURLs default value of PDURLs
 	DefaultPDURLs []string = []string{"127.0.0.1:2379"}
+	//DefaultESURLs default value of ESURLs
+	DefaultESURLs []string = []string{"http://127.0.0.1:9200"}
+	//DefaultESUserName default value of ESUserName
+	DefaultESUserName string = ""
+	//DefaultESPassword default value of ESPassword
+	DefaultESPassword string = ""
 
 	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
 	DefaultAuramqSubscriberBufferSize = 1024
@@ -239,6 +245,12 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
 	rootCmd.PersistentFlags().StringSlice(ytanalysis.PDURLsField, DefaultPDURLs, "URLs of PD")
 	viper.BindPFlag(ytanalysis.PDURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.PDURLsField))
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.ESURLsField, DefaultESURLs, "URLs of ES")
+	viper.BindPFlag(ytanalysis.ESURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESURLsField))
+	rootCmd.PersistentFlags().String(ytanalysis.ESUserNameField, DefaultESUserName, "username of elasticsearch")
+	viper.BindPFlag(ytanalysis.ESUserNameField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESUserNameField))
+	rootCmd.PersistentFlags().String(ytanalysis.ESPasswordField, DefaultESPassword, "password of elasticsearch")
+	viper.BindPFlag(ytanalysis.ESPasswordField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESPasswordField))
 	//AuraMQ config
 	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
 	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))

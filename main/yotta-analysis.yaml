@@ -2,6 +2,10 @@ bind-addr: ":8080"
 analysisdb-url: "mongodb://127.0.0.1:27017/?connect=direct"
 pd-urls: 
 - "127.0.0.1:2379"
+es-urls:
+- "http://127.0.0.1:9200"
+es-username: "test"
+es-password: "test"
 auramq:
   subscriber-buffer-size: 1024
   ping-wait: 30

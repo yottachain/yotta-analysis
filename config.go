@@ -7,6 +7,12 @@ const (
 	AnalysisDBURLField = "analysisdb-url"
 	//PDURLsField Field name of pd-urls config
 	PDURLsField = "pd-urls"
+	//ESURLsField Field name of es-urls config
+	ESURLsField = "es-urls"
+	//ESUserNameField Field name of es-username config
+	ESUserNameField = "es-username"
+	//ESPasswordField Field name of es-password config
+	ESPasswordField = "es-password"
 
 	//AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
 	AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
@@ -88,6 +94,9 @@ type Config struct {
 	BindAddr      string           `mapstructure:"bind-addr"`
 	AnalysisDBURL string           `mapstructure:"analysisdb-url"`
 	PDURLs        []string         `mapstructure:"pd-urls"`
+	ESURLs        []string         `mapstructure:"es-urls"`
+	ESUserName    string           `mapstructure:"es-username"`
+	ESPassword    string           `mapstructure:"es-password"`
 	AuraMQ        *AuraMQConfig    `mapstructure:"auramq"`
 	MinerStat     *MinerStatConfig `mapstructure:"miner-stat"`
 	Logger        *LogConfig       `mapstructure:"logger"`
