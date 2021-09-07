@@ -3,7 +3,6 @@ package ytanalysis
 import (
 	"context"
 
-	ma "github.com/multiformats/go-multiaddr"
 	server "github.com/yottachain/P2PHost"
 	pb "github.com/yottachain/P2PHost/pb"
 	ytcrypto "github.com/yottachain/YTCrypto"
@@ -36,14 +35,14 @@ func (host *Host) SendMsg(ctx context.Context, id string, msg []byte) ([]byte, e
 	return sendMsgResp.Value, nil
 }
 
-func stringListToMaddrs(addrs []string) ([]ma.Multiaddr, error) {
-	maddrs := make([]ma.Multiaddr, len(addrs))
-	for k, addr := range addrs {
-		maddr, err := ma.NewMultiaddr(addr)
-		if err != nil {
-			return maddrs, err
-		}
-		maddrs[k] = maddr
-	}
-	return maddrs, nil
-}
+// func stringListToMaddrs(addrs []string) ([]ma.Multiaddr, error) {
+// 	maddrs := make([]ma.Multiaddr, len(addrs))
+// 	for k, addr := range addrs {
+// 		maddr, err := ma.NewMultiaddr(addr)
+// 		if err != nil {
+// 			return maddrs, err
+// 		}
+// 		maddrs[k] = maddr
+// 	}
+// 	return maddrs, nil
+// }

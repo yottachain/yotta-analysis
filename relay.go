@@ -6,16 +6,13 @@ import (
 
 //RelayURLCheck check if relay URL exists
 func RelayURLCheck(addrs []string) bool {
-	if GetRelayURL(addrs) != "" {
-		return true
-	}
-	return false
+	return GetRelayURL(addrs) != ""
 }
 
 //GetRelayURL find out relay URL
 func GetRelayURL(addrs []string) string {
 	for _, addr := range addrs {
-		if strings.Index(addr, "/p2p/") != -1 {
+		if strings.Contains(addr, "/p2p/") {
 			return addr
 		}
 	}
@@ -48,7 +45,7 @@ func (analyser *Analyser) CheckPublicAddr(addrs []string) string {
 			strings.HasPrefix(addr, "/ip4/172.31.") ||
 			strings.HasPrefix(addr, "/ip6/") ||
 			strings.HasPrefix(addr, "/p2p-circuit/") ||
-			strings.Index(addr, "/p2p/") != -1 {
+			strings.Contains(addr, "/p2p/") {
 			if analyser.Params.ExcludeAddrPrefix != "" && strings.HasPrefix(addr, analyser.Params.ExcludeAddrPrefix) {
 				ret = addr
 			}

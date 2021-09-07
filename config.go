@@ -13,25 +13,27 @@ const (
 	ESUserNameField = "es-username"
 	//ESPasswordField Field name of es-password config
 	ESPasswordField = "es-password"
+	//MinerTrackerURLField Field name of miner-tracker-url config
+	MinerTrackerURLField = "miner-tracker-url"
 
-	//AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
-	AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
-	//AuramqPingWaitField Field name of auramq.ping-wait
-	AuramqPingWaitField = "auramq.ping-wait"
-	//AuramqReadWaitField Field name of auramq.read-wait
-	AuramqReadWaitField = "auramq.read-wait"
-	//AuramqWriteWaitField Field name of auramq.write-wait
-	AuramqWriteWaitField = "auramq.write-wait"
-	//AuramqMinerSyncTopicField Field name of auramq.miner-sync-topic
-	AuramqMinerSyncTopicField = "auramq.miner-sync-topic"
-	//AuramqAllSNURLsField Field name of auramq.all-sn-urls
-	AuramqAllSNURLsField = "auramq.all-sn-urls"
-	//AuramqAccountField Field name of auramq.account
-	AuramqAccountField = "auramq.account"
-	//AuramqPrivateKeyField Field name of auramq.private-key
-	AuramqPrivateKeyField = "auramq.private-key"
-	//AuramqClientIDField Field name of auramq.client-id
-	AuramqClientIDField = "auramq.client-id"
+	// //AuramqSubscriberBufferSizeField Field name of auramq.subscriber-buffer-size
+	// AuramqSubscriberBufferSizeField = "auramq.subscriber-buffer-size"
+	// //AuramqPingWaitField Field name of auramq.ping-wait
+	// AuramqPingWaitField = "auramq.ping-wait"
+	// //AuramqReadWaitField Field name of auramq.read-wait
+	// AuramqReadWaitField = "auramq.read-wait"
+	// //AuramqWriteWaitField Field name of auramq.write-wait
+	// AuramqWriteWaitField = "auramq.write-wait"
+	// //AuramqMinerSyncTopicField Field name of auramq.miner-sync-topic
+	// AuramqMinerSyncTopicField = "auramq.miner-sync-topic"
+	// //AuramqAllSNURLsField Field name of auramq.all-sn-urls
+	// AuramqAllSNURLsField = "auramq.all-sn-urls"
+	// //AuramqAccountField Field name of auramq.account
+	// AuramqAccountField = "auramq.account"
+	// //AuramqPrivateKeyField Field name of auramq.private-key
+	// AuramqPrivateKeyField = "auramq.private-key"
+	// //AuramqClientIDField Field name of auramq.client-id
+	// AuramqClientIDField = "auramq.client-id"
 
 	//MinerStatAllSyncURLsField Field name of miner-stat.all-sync-urls
 	MinerStatAllSyncURLsField = "miner-stat.all-sync-urls"
@@ -62,17 +64,17 @@ const (
 	//MiscMinerVersionThresholdField Field name of misc.miner-version-threshold config
 	MiscMinerVersionThresholdField = "misc.miner-version-threshold"
 	//MiscPunishPhase1Field Field name of misc.punish-phase1 config
-	MiscPunishPhase1Field = "misc.punish-phase1"
+	//MiscPunishPhase1Field = "misc.punish-phase1"
 	//MiscPunishPhase1PercentField Field name of misc.punish-phase1-percent config
-	MiscPunishPhase1PercentField = "misc.punish-phase1-percent"
+	//MiscPunishPhase1PercentField = "misc.punish-phase1-percent"
 	//MiscPunishPhase2Field Field name of misc.punish-phase2 config
-	MiscPunishPhase2Field = "misc.punish-phase2"
+	//MiscPunishPhase2Field = "misc.punish-phase2"
 	//MiscPunishPhase2PercentField Field name of misc.punish-phase2-percent config
-	MiscPunishPhase2PercentField = "misc.punish-phase2-percent"
+	//MiscPunishPhase2PercentField = "misc.punish-phase2-percent"
 	//MiscPunishPhase3Field Field name of misc.punish-phase3 config
-	MiscPunishPhase3Field = "misc.punish-phase3"
+	//MiscPunishPhase3Field = "misc.punish-phase3"
 	//MiscPunishPhase3PercentField Field name of misc.punish-phase3-percent config
-	MiscPunishPhase3PercentField = "misc.punish-phase3-percent"
+	//MiscPunishPhase3PercentField = "misc.punish-phase3-percent"
 	//MiscSpotCheckStartTimeField Field name of misc.spotcheck-start-time config
 	MiscSpotCheckStartTimeField = "misc.spotcheck-start-time"
 	//MiscSpotCheckEndTimeField Field name of misc.spotcheck-end-time config
@@ -82,39 +84,50 @@ const (
 	//MiscSpotCheckConnectTimeoutField Field name of misc.spotcheck-connect-timeout config
 	MiscSpotCheckConnectTimeoutField = "misc.spotcheck-connect-timeout"
 	//MiscErrorNodePercentThresholdField Field name of misc.error-node-percent-threshold config
-	MiscErrorNodePercentThresholdField = "misc.error-node-percent-threshold"
+	//MiscErrorNodePercentThresholdField = "misc.error-node-percent-threshold"
 	//MiscPoolErrorMinerTimeThresholdField Field name of misc.pool-error-miner-time-threshold
-	MiscPoolErrorMinerTimeThresholdField = "pool-error-miner-time-threshold"
+	//MiscPoolErrorMinerTimeThresholdField = "pool-error-miner-time-threshold"
 	//MiscExcludeAddrPrefixField Field name of misc.exclude-addr-prefix config
 	MiscExcludeAddrPrefixField = "misc.exclude-addr-prefix"
+	//MiscRetryTimeDelayField Field name of misc.retry-time-delay
+	MiscRetryTimeDelayField = "misc.retry-time-delay"
+	//MiscMinerTrackBatchSizeField Field name of misc.miner-track-batch-size
+	MiscMinerTrackBatchSizeField = "misc.miner-track-batch-size"
+	//MiscMinerTrackIntervalField Field name of misc.miner-track-interval
+	MiscMinerTrackIntervalField = "misc.miner-track-interval"
+	//MiscPrepareTaskPoolSizeField Field name of misc.prepare-task-pool-size
+	MiscPrepareTaskPoolSizeField = "misc.prepare-task-pool-size"
+	//MiscCalculateCDIntervalField Field name of misc.calculate-cd-interval
+	MiscCalculateCDIntervalField = "misc.calculate-cd-interval"
 )
 
 //Config system configuration
 type Config struct {
-	BindAddr      string           `mapstructure:"bind-addr"`
-	AnalysisDBURL string           `mapstructure:"analysisdb-url"`
-	PDURLs        []string         `mapstructure:"pd-urls"`
-	ESURLs        []string         `mapstructure:"es-urls"`
-	ESUserName    string           `mapstructure:"es-username"`
-	ESPassword    string           `mapstructure:"es-password"`
-	AuraMQ        *AuraMQConfig    `mapstructure:"auramq"`
-	MinerStat     *MinerStatConfig `mapstructure:"miner-stat"`
-	Logger        *LogConfig       `mapstructure:"logger"`
-	MiscConfig    *MiscConfig      `mapstructure:"misc"`
+	BindAddr        string   `mapstructure:"bind-addr"`
+	AnalysisDBURL   string   `mapstructure:"analysisdb-url"`
+	PDURLs          []string `mapstructure:"pd-urls"`
+	ESURLs          []string `mapstructure:"es-urls"`
+	ESUserName      string   `mapstructure:"es-username"`
+	ESPassword      string   `mapstructure:"es-password"`
+	MinerTrackerURL string   `mapstructure:"miner-tracker-url"`
+	// AuraMQ        *AuraMQConfig    `mapstructure:"auramq"`
+	MinerStat  *MinerStatConfig `mapstructure:"miner-stat"`
+	Logger     *LogConfig       `mapstructure:"logger"`
+	MiscConfig *MiscConfig      `mapstructure:"misc"`
 }
 
-//AuraMQConfig auramq configuration
-type AuraMQConfig struct {
-	SubscriberBufferSize int      `mapstructure:"subscriber-buffer-size"`
-	PingWait             int      `mapstructure:"ping-wait"`
-	ReadWait             int      `mapstructure:"read-wait"`
-	WriteWait            int      `mapstructure:"write-wait"`
-	MinerSyncTopic       string   `mapstructure:"miner-sync-topic"`
-	AllSNURLs            []string `mapstructure:"all-sn-urls"`
-	Account              string   `mapstructure:"account"`
-	PrivateKey           string   `mapstructure:"private-key"`
-	ClientID             string   `mapstructure:"client-id"`
-}
+// //AuraMQConfig auramq configuration
+// type AuraMQConfig struct {
+// 	SubscriberBufferSize int      `mapstructure:"subscriber-buffer-size"`
+// 	PingWait             int      `mapstructure:"ping-wait"`
+// 	ReadWait             int      `mapstructure:"read-wait"`
+// 	WriteWait            int      `mapstructure:"write-wait"`
+// 	MinerSyncTopic       string   `mapstructure:"miner-sync-topic"`
+// 	AllSNURLs            []string `mapstructure:"all-sn-urls"`
+// 	Account              string   `mapstructure:"account"`
+// 	PrivateKey           string   `mapstructure:"private-key"`
+// 	ClientID             string   `mapstructure:"client-id"`
+// }
 
 //MinerStatConfig miner log sync configuration
 type MinerStatConfig struct {
@@ -135,21 +148,26 @@ type LogConfig struct {
 
 //MiscConfig miscellaneous configuration
 type MiscConfig struct {
-	RecheckingPoolLength        int    `mapstructure:"reckecking-pool-length"`
-	RecheckingQueueLength       int    `mapstructure:"reckecking-queue-length"`
-	AvaliableNodeTimeGap        int64  `mapstructure:"avaliable-node-time-gap"`
-	MinerVersionThreshold       int32  `mapstructure:"miner-version-threshold"`
-	PunishPhase1                int32  `mapstructure:"punish-phase1"`
-	PunishPhase1Percent         int32  `mapstructure:"punish-phase1-percent"`
-	PunishPhase2                int32  `mapstructure:"punish-phase2"`
-	PunishPhase2Percent         int32  `mapstructure:"punish-phase2-percent"`
-	PunishPhase3                int32  `mapstructure:"punish-phase3"`
-	PunishPhase3Percent         int32  `mapstructure:"punish-phase3-percent"`
-	SpotCheckStartTime          int64  `mapstructure:"spotcheck-start-time"`
-	SpotCheckEndTime            int64  `mapstructure:"spotcheck-end-time"`
-	SpotCheckInterval           int64  `mapstructure:"spotcheck-interval"`
-	SpotCheckConnectTimeout     int64  `mapstructure:"spotcheck-connect-timeout"`
-	ErrorNodePercentThreshold   int32  `mapstructure:"error-node-percent-threshold"`
-	PoolErrorMinerTimeThreshold int32  `mapstructure:"pool-error-miner-time-threshold"`
-	ExcludeAddrPrefix           string `mapstructure:"exclude-addr-prefix"`
+	RecheckingPoolLength  int   `mapstructure:"reckecking-pool-length"`
+	RecheckingQueueLength int   `mapstructure:"reckecking-queue-length"`
+	AvaliableNodeTimeGap  int64 `mapstructure:"avaliable-node-time-gap"`
+	MinerVersionThreshold int32 `mapstructure:"miner-version-threshold"`
+	//PunishPhase1                int32  `mapstructure:"punish-phase1"`
+	//PunishPhase1Percent         int32  `mapstructure:"punish-phase1-percent"`
+	//PunishPhase2                int32  `mapstructure:"punish-phase2"`
+	//PunishPhase2Percent         int32  `mapstructure:"punish-phase2-percent"`
+	//PunishPhase3                int32  `mapstructure:"punish-phase3"`
+	//PunishPhase3Percent         int32  `mapstructure:"punish-phase3-percent"`
+	SpotCheckStartTime      int64 `mapstructure:"spotcheck-start-time"`
+	SpotCheckEndTime        int64 `mapstructure:"spotcheck-end-time"`
+	SpotCheckInterval       int64 `mapstructure:"spotcheck-interval"`
+	SpotCheckConnectTimeout int64 `mapstructure:"spotcheck-connect-timeout"`
+	//ErrorNodePercentThreshold   int32  `mapstructure:"error-node-percent-threshold"`
+	//PoolErrorMinerTimeThreshold int32  `mapstructure:"pool-error-miner-time-threshold"`
+	ExcludeAddrPrefix   string `mapstructure:"exclude-addr-prefix"`
+	RetryTimeDelay      int32  `mapstructure:"retry-time-delay"`
+	MinerTrackBatchSize int32  `mapstructure:"miner-track-batch-size"`
+	MinerTrackInterval  int32  `mapstructure:"miner-track-interval"`
+	PrepareTaskPoolSize int32  `mapstructure:"prepare-task-pool-size"`
+	CalculateCDInterval int32  `mapstructure:"calculate-cd-interval"`
 }

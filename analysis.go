@@ -27,7 +27,7 @@ type Analyser struct {
 }
 
 //New create new analyser instance
-func New(ctx context.Context, analysisDBURL string, pdURLs, esURLs []string, esUserName, esPassword string, mqconf *AuraMQConfig, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
+func New(ctx context.Context, analysisDBURL string, pdURLs, esURLs []string, esUserName, esPassword string, minertrackerURL string, msConfig *MinerStatConfig, conf *MiscConfig) (*Analyser, error) {
 	entry := log.WithFields(log.Fields{Function: "New"})
 	analysisdbClient, err := mongo.Connect(ctx, options.Client().ApplyURI(analysisDBURL))
 	if err != nil {
@@ -53,7 +53,7 @@ func New(ctx context.Context, analysisDBURL string, pdURLs, esURLs []string, esU
 	}
 
 	taskManager := NewTaskManager(tikvCli, conf.SpotCheckStartTime, conf.SpotCheckEndTime)
-	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, mqconf, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix)
+	nodeManager, err := NewNodeManager(ctx, analysisdbClient, taskManager, minertrackerURL, conf.RecheckingPoolLength, conf.RecheckingQueueLength, conf.MinerVersionThreshold, conf.AvaliableNodeTimeGap, conf.SpotCheckInterval, conf.ExcludeAddrPrefix, int(conf.RetryTimeDelay), int(conf.MinerTrackBatchSize), int(conf.MinerTrackInterval), int(conf.PrepareTaskPoolSize), int(conf.CalculateCDInterval))
 	if err != nil {
 		entry.WithError(err).Error("creating node manager failed")
 		return nil, err

@@ -6,21 +6,22 @@ es-urls:
 - "http://127.0.0.1:9200"
 es-username: "test"
 es-password: "test"
-auramq:
-  subscriber-buffer-size: 1024
-  ping-wait: 30
-  read-wait: 60
-  write-wait: 10
-  miner-sync-topic: "sync"
-  all-sn-urls:
-  - "ws://172.17.0.2:8787/ws"
-  - "ws://172.17.0.3:8787/ws"
-  - "ws://172.17.0.4:8787/ws"
-  - "ws://172.17.0.5:8787/ws"
-  - "ws://172.17.0.6:8787/ws"
-  account: "yottanalysis"
-  private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
-  client-id: "yottaanalysis"
+miner-tracker-url: "https://dnrpc.yottachain.net"
+#auramq:
+#  subscriber-buffer-size: 1024
+#  ping-wait: 30
+#  read-wait: 60
+#  write-wait: 10
+#  miner-sync-topic: "sync"
+#  all-sn-urls:
+#  - "ws://172.17.0.2:8787/ws"
+#  - "ws://172.17.0.3:8787/ws"
+#  - "ws://172.17.0.4:8787/ws"
+#  - "ws://172.17.0.5:8787/ws"
+#  - "ws://172.17.0.6:8787/ws"
+#  account: "yottanalysis"
+#  private-key: "5JU7Q3PBEV3ZBHKU5bbVibGxuPzYnwb5HXCGgTedtuhCsDc52j7"
+#  client-id: "yottaanalysis"
 miner-stat:
   all-sync-urls:
   - "http://127.0.0.1:8091"
@@ -42,16 +43,13 @@ misc:
   reckecking-queue-length: 10000
   avaliable-node-time-gap: 3
   miner-version-threshold: 0
-  punish-phase1: 1440
-  punish-phase1-percent: 1
-  punish-phase2: 4320
-  punish-phase2-percent: 10
-  punish-phase3: 10080
-  punish-phase3-percent: 50
   spotcheck-start-time: 0
   spotcheck-end-time: 0
   spotcheck-interval: 3
   spotcheck-connect-timeout: 30
-  error-node-percent-threshold: 101
-  pool-error-miner-time-threshold: 14400
   exclude-addr-prefix: "/ip4/172.17"
+  retry-time-delay: 5000
+  miner-track-batch-size: 2000
+  miner-track-interval: 2
+  prepare-task-pool-size: 1000
+  calculate-cd-interval: 3

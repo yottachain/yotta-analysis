@@ -54,8 +54,8 @@ func (analyser *Analyser) StartRecheck(ctx context.Context) {
 	}()
 }
 
-func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
-	return true
+// func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
+	// return true
 	// entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
 	// collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	// errTime := time.Now().Unix() - int64(analyser.Params.PoolErrorMinerTimeThreshold) //int64(spotcheckInterval)*60 - int64(punishPhase1)*punishGapUnit
@@ -88,7 +88,7 @@ func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolO
 	// 	return true
 	// }
 	// return false
-}
+	// }
 
 func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *SpotCheckRecord) {
 	entry := log.WithFields(log.Fields{Function: "checkDataNode", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
@@ -116,20 +116,20 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 			return
 		}
 		errCount := scNode.ErrorCount
-		if errCount > analyser.Params.PunishPhase3 {
-			_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
-			if err != nil {
-				entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
-			}
-			errCount = analyser.Params.PunishPhase3
-		}
-		if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-			if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
-				analyser.punish(ctx, 0, node.ID, errCount, true)
-			} else {
-				analyser.punish(ctx, 0, node.ID, errCount, false)
-			}
-		}
+		// if errCount > analyser.Params.PunishPhase3 {
+		// 	_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+		// 	if err != nil {
+		// 		entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+		// 	}
+		// 	errCount = analyser.Params.PunishPhase3
+		// }
+		// if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+		// 	if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+		// 		analyser.punish(ctx, 0, node.ID, errCount, true)
+		// 	} else {
+		// 		analyser.punish(ctx, 0, node.ID, errCount, false)
+		// 	}
+		// }
 		entry.Debugf("increasing error count of miner: %d", errCount)
 		defer func() {
 			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
@@ -177,20 +177,20 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 					return
 				}
 				errCount2 := scNode.ErrorCount
-				if errCount2 > analyser.Params.PunishPhase3 {
-					_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
-					if err != nil {
-						entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
-					}
-					errCount2 = analyser.Params.PunishPhase3
-				}
-				if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-					if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
-						analyser.punish(ctx, 0, node.ID, errCount2, true)
-					} else {
-						analyser.punish(ctx, 0, node.ID, errCount2, false)
-					}
-				}
+				// if errCount2 > analyser.Params.PunishPhase3 {
+				// 	_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+				// 	if err != nil {
+				// 		entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+				// 	}
+				// 	errCount2 = analyser.Params.PunishPhase3
+				// }
+				// if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+				// 	if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+				// 		analyser.punish(ctx, 0, node.ID, errCount2, true)
+				// 	} else {
+				// 		analyser.punish(ctx, 0, node.ID, errCount2, false)
+				// 	}
+				// }
 				entry.Debugf("increasing error count of miner: %d", errCount2)
 				break
 			}
@@ -213,27 +213,27 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 				entry.Debug("task status is updated to 2")
 			}
 		}()
-		err = AddResultToES(ctx, analyser.esClient, &SPLog{MinerID: node.ID, Result: result, Timestamp: time.Now().UTC().Format(time.RFC3339Nano)})
+		err = AddResultToES(ctx, analyser.esClient, &SPLog{MinerID: node.ID, Result: result, Timestamp: time.Now().Format(time.RFC3339Nano)})
 		if err != nil {
 			entry.WithError(err).Error("insert log to elastcisearch")
 		}
 		if flag {
 			entry.Infof("finished 1000 shards check, %d shards errors in %d checks", errCount, i)
-			if errCount == 1000 {
-				entry.Warnf("1000/1000 random shards checking failed, punish %d%% deposit", analyser.Params.PunishPhase3Percent)
-				if analyser.Params.PunishPhase3Percent > 0 {
-					if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
-						analyser.punish(ctx, 2, node.ID, analyser.Params.PunishPhase3Percent, true)
-					}
-				}
-			} else {
-				entry.Warnf("%d/1000 random shards checking failed, punish %d%% deposit", errCount, analyser.Params.PunishPhase1Percent)
-				if analyser.Params.PunishPhase1Percent > 0 {
-					if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
-						analyser.punish(ctx, 1, node.ID, analyser.Params.PunishPhase1Percent, true)
-					}
-				}
-			}
+			// if errCount == 1000 {
+			// 	entry.Warnf("1000/1000 random shards checking failed, punish %d%% deposit", analyser.Params.PunishPhase3Percent)
+			// 	if analyser.Params.PunishPhase3Percent > 0 {
+			// 		if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+			// 			analyser.punish(ctx, 2, node.ID, analyser.Params.PunishPhase3Percent, true)
+			// 		}
+			// 	}
+			// } else {
+			// 	entry.Warnf("%d/1000 random shards checking failed, punish %d%% deposit", errCount, analyser.Params.PunishPhase1Percent)
+			// 	if analyser.Params.PunishPhase1Percent > 0 {
+			// 		if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+			// 			analyser.punish(ctx, 1, node.ID, analyser.Params.PunishPhase1Percent, true)
+			// 		}
+			// 	}
+			// }
 			return
 		}
 	}
@@ -300,27 +300,27 @@ func (analyser *Analyser) CheckVNI(ctx context.Context, node *Node, spr *SpotChe
 }
 
 func (analyser *Analyser) punish(ctx context.Context, msgType, minerID, count int32, needPunish bool) {
-	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
-	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
-		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
-		return
-	}
-	entry.Infof("send PunishMessage of miner %d, message type %d, need punishment %v: %d", minerID, msgType, needPunish, count)
-	rule := make(map[int32]int32)
-	rule[analyser.Params.PunishPhase1] = analyser.Params.PunishPhase1Percent
-	rule[analyser.Params.PunishPhase2] = analyser.Params.PunishPhase2Percent
-	rule[analyser.Params.PunishPhase3] = analyser.Params.PunishPhase3Percent
-	msg := &pb.PunishMessage{NodeID: minerID, Type: msgType, Count: count, NeedPunish: needPunish, Rule: rule}
-	b, err := proto.Marshal(msg)
-	if err != nil {
-		entry.WithError(err).Error("marshaling PunishMessage failed")
-		return
-	}
-	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
-	ret := analyser.nodeMgr.MqClis[snID].Send(ctx, fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
-	if !ret {
-		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
-	}
+	// 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
+	// 	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
+	// 		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
+	// 		return
+	// 	}
+	// 	entry.Infof("send PunishMessage of miner %d, message type %d, need punishment %v: %d", minerID, msgType, needPunish, count)
+	// 	rule := make(map[int32]int32)
+	// 	rule[analyser.Params.PunishPhase1] = analyser.Params.PunishPhase1Percent
+	// 	rule[analyser.Params.PunishPhase2] = analyser.Params.PunishPhase2Percent
+	// 	rule[analyser.Params.PunishPhase3] = analyser.Params.PunishPhase3Percent
+	// 	msg := &pb.PunishMessage{NodeID: minerID, Type: msgType, Count: count, NeedPunish: needPunish, Rule: rule}
+	// 	b, err := proto.Marshal(msg)
+	// 	if err != nil {
+	// 		entry.WithError(err).Error("marshaling PunishMessage failed")
+	// 		return
+	// 	}
+	// 	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
+	// 	ret := analyser.nodeMgr.MqClis[snID].Send(ctx, fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
+	// 	if !ret {
+	// 		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
+	// 	}
 }
 
 //UpdateTaskStatus process error task of spotchecking

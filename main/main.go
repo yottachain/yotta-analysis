@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -22,6 +23,13 @@ import (
 
 func main() {
 	cmd.Execute()
+}
+
+func main0() {
+	_, err := ytanalysis.FetchMinersInfo(context.Background(), &http.Client{}, "http://127.0.0.1:8080", 0, 0, 2)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main1() {
