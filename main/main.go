@@ -6,18 +6,48 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
+	"time"
 
+	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/yottachain/yotta-analysis/cmd"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	ytanalysis "github.com/yottachain/yotta-analysis"
 )
 
 func main() {
 	cmd.Execute()
+}
+
+func main0() {
+	_, err := ytanalysis.FetchMinersInfo(context.Background(), &http.Client{}, "http://127.0.0.1:8080", 0, 0, 2)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func main1() {
+	config := elasticsearch.Config{
+		Addresses: []string{"https://elk1-nm.yottachain.net"},
+		Username:  "elastic",
+		Password:  "yotta_2021",
+	}
+	esClient, err := elasticsearch.NewClient(config)
+	if err != nil {
+		panic(err)
+	}
+	err = ytanalysis.AddResultToES(context.Background(), esClient, &ytanalysis.SPLog{MinerID: 1, Result: []*ytanalysis.SPResult{{Hash: "AAA", Pass: true}, {Hash: "BBB", Pass: false}}, Timestamp: time.Now().UTC().Format(time.RFC3339Nano)})
+	if err != nil {
+		panic(err)
+	} else {
+		fmt.Println("success")
+	}
 }
 
 func main2() {

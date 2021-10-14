@@ -1,22 +1,21 @@
 package ytanalysis
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/aurawing/auramq"
-	"github.com/aurawing/auramq/msg"
-	proto "github.com/golang/protobuf/proto"
-	"github.com/ivpusic/grpool"
 	log "github.com/sirupsen/logrus"
-	pb "github.com/yottachain/yotta-analysis/pbanalysis"
-	ytsync "github.com/yottachain/yotta-analysis/sync"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -24,23 +23,28 @@ import (
 
 //NodeManager node manager struct
 type NodeManager struct {
-	analysisdbClient      *mongo.Client
-	taskManager           *TaskManager
-	SelectableNodes       *Int32Set
-	Nodes                 map[int32]*Node
-	Tasks                 map[int32]*SpotCheckItem
-	MqClis                map[int]*ytsync.Service
+	analysisdbClient *mongo.Client
+	taskManager      *TaskManager
+	SelectableNodes  *Int32Set
+	Nodes            map[int32]*Node
+	Tasks            map[int32]*SpotCheckItem
+	//MqClis                map[int]*ytsync.Service
 	c                     int64
 	d                     int64
 	minerVersionThreshold int
 	avaliableNodeTimeGap  int
 	spotCheckInterval     int
+	retryTimeDelay        int
+	minerTrackBatchSize   int
+	minerTrackInterval    int
+	prepareTaskPoolSize   int
+	calculateCDInterval   int
 	rwlock                *sync.RWMutex
 	rwlock2               *sync.RWMutex
 }
 
 //NewNodeManager create new node manager
-func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskManager, mqconf *AuraMQConfig, poolLength, queueLength int, minerVersionThreshold int32, avaliableNodeTimeGap int64, spotCheckInterval int64, excludeAddrPrefix string) (*NodeManager, error) {
+func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskManager, minertrackerURL string, poolLength, queueLength int, minerVersionThreshold int32, avaliableNodeTimeGap int64, spotCheckInterval int64, excludeAddrPrefix string, retryTimeDelay, minerTrackBatchSize, minerTrackInterval, prepareTaskPoolSize, calculateCDInterval int) (*NodeManager, error) {
 	entry := log.WithFields(log.Fields{Function: "NewNodeManager"})
 	nodeMgr := new(NodeManager)
 	nodeMgr.analysisdbClient = cli
@@ -53,6 +57,19 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 	nodeMgr.minerVersionThreshold = int(minerVersionThreshold)
 	nodeMgr.avaliableNodeTimeGap = int(avaliableNodeTimeGap)
 	nodeMgr.spotCheckInterval = int(spotCheckInterval)
+	nodeMgr.retryTimeDelay = retryTimeDelay
+	nodeMgr.minerTrackBatchSize = minerTrackBatchSize
+	nodeMgr.minerTrackInterval = minerTrackInterval
+	nodeMgr.prepareTaskPoolSize = prepareTaskPoolSize
+	nodeMgr.calculateCDInterval = calculateCDInterval
+
+	err := nodeMgr.TrackMiners(ctx, minertrackerURL, excludeAddrPrefix)
+	if err != nil {
+		entry.WithError(err).Error("start tracking miners")
+		return nil, err
+	}
+	entry.Info("start tracking miners")
+
 	collection := cli.Database(AnalysisDB).Collection(NodeTab)
 	cur, err := collection.Find(ctx, bson.M{"status": 1})
 	if err != nil {
@@ -74,7 +91,7 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 	entry.Info("nodes cache filled")
 	var wg sync.WaitGroup
 	//wg.Add(len(nodeMgr.Nodes))
-	wg.Add(1000)
+	wg.Add(nodeMgr.prepareTaskPoolSize)
 	idx := 0
 	for _, node := range nodeMgr.Nodes {
 		n := node
@@ -83,49 +100,51 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 			defer wg.Done()
 			nodeMgr.PrepareTask(ctx, n)
 		}()
-		if idx%1000 == 0 {
+		if idx%nodeMgr.prepareTaskPoolSize == 0 {
 			wg.Wait()
 			wg = sync.WaitGroup{}
-			wg.Add(1000)
+			wg.Add(nodeMgr.prepareTaskPoolSize)
 			idx = 0
 		}
 	}
-	for j := 0; j < 1000-idx; j++ {
+	for j := 0; j < nodeMgr.prepareTaskPoolSize-idx; j++ {
 		wg.Done()
 	}
 	if idx != 0 {
 		wg.Wait()
 	}
 	entry.Infof("cached %d miners", len(nodeMgr.Nodes))
-	pool := grpool.NewPool(poolLength, queueLength)
-	callback := func(msg *msg.Message) {
-		if msg.GetType() == auramq.BROADCAST {
-			if msg.GetDestination() == mqconf.MinerSyncTopic {
-				pool.JobQueue <- func() {
-					nodemsg := new(pb.NodeMsg)
-					err := proto.Unmarshal(msg.Content, nodemsg)
-					if err != nil {
-						entry.WithError(err).Error("decoding nodeMsg failed")
-						return
-					}
-					node := new(Node)
-					node.Fillby(nodemsg)
-					err = nodeMgr.syncNode(ctx, node, excludeAddrPrefix)
-					if err != nil {
-						entry.WithError(err).Errorf("sync node %d", node.ID)
-					} else {
-						nodeMgr.UpdateNode(ctx, node)
-					}
-				}
-			}
-		}
-	}
-	m, err := ytsync.StartSync(mqconf.SubscriberBufferSize, mqconf.PingWait, mqconf.ReadWait, mqconf.WriteWait, mqconf.MinerSyncTopic, mqconf.AllSNURLs, callback, mqconf.Account, mqconf.PrivateKey, mqconf.ClientID)
-	if err != nil {
-		entry.WithError(err).Error("creating mq clients map failed")
-		return nil, err
-	}
-	nodeMgr.MqClis = m
+
+	// pool := grpool.NewPool(poolLength, queueLength)
+	// callback := func(msg *msg.Message) {
+	// 	if msg.GetType() == auramq.BROADCAST {
+	// 		if msg.GetDestination() == mqconf.MinerSyncTopic {
+	// 			pool.JobQueue <- func() {
+	// 				nodemsg := new(pb.NodeMsg)
+	// 				err := proto.Unmarshal(msg.Content, nodemsg)
+	// 				if err != nil {
+	// 					entry.WithError(err).Error("decoding nodeMsg failed")
+	// 					return
+	// 				}
+	// 				node := new(Node)
+	// 				node.Fillby(nodemsg)
+	// 				err = nodeMgr.syncNode(ctx, node, excludeAddrPrefix)
+	// 				if err != nil {
+	// 					entry.WithError(err).Errorf("sync node %d", node.ID)
+	// 				} else {
+	// 					nodeMgr.UpdateNode(ctx, node)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+	// m, err := ytsync.StartSync(mqconf.SubscriberBufferSize, mqconf.PingWait, mqconf.ReadWait, mqconf.WriteWait, mqconf.MinerSyncTopic, mqconf.AllSNURLs, callback, mqconf.Account, mqconf.PrivateKey, mqconf.ClientID)
+	// if err != nil {
+	// 	entry.WithError(err).Error("creating mq clients map failed")
+	// 	return nil, err
+	// }
+	// nodeMgr.MqClis = m
+
 	err = nodeMgr.calculateCD(ctx)
 	if err != nil {
 		entry.WithError(err).Error("calculate c and d failed")
@@ -137,10 +156,133 @@ func NewNodeManager(ctx context.Context, cli *mongo.Client, taskManager *TaskMan
 			if err != nil {
 				entry.WithError(err).Warn("calculate c and d failed")
 			}
-			time.Sleep(time.Minute * 3)
+			time.Sleep(time.Minute * time.Duration(nodeMgr.calculateCDInterval))
 		}
 	}()
 	return nodeMgr, nil
+}
+
+//TrackMiners tracking status of miners from miner tracker service
+func (nodeMgr *NodeManager) TrackMiners(ctx context.Context, minertrackerURL, excludeAddrPrefix string) error {
+	entry := log.WithFields(log.Fields{Function: "TrackMiners"})
+	httpCli := &http.Client{}
+	collection := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
+	collectionProgress := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(TrackProgressTab)
+	minersCnt, err := collection.EstimatedDocumentCount(ctx)
+	if err != nil {
+		entry.WithError(err).Error("calculate count of miners")
+		return err
+	}
+	if minersCnt == 0 {
+		var start int32 = 0
+		for {
+			nodes, err := FetchMinersInfo(ctx, httpCli, minertrackerURL, start, 0, int64(nodeMgr.minerTrackBatchSize))
+			if err != nil {
+				entry.WithError(err).Errorf("fetch miners info: %s, from %d limit %d, timestamp %d", minertrackerURL, start, nodeMgr.minerTrackBatchSize, 0)
+				time.Sleep(time.Duration(nodeMgr.retryTimeDelay) * time.Millisecond)
+				continue
+			}
+			if len(nodes) == 0 {
+				break
+			}
+			start = nodes[len(nodes)-1].ID
+			for _, node := range nodes {
+				err = nodeMgr.syncNode(ctx, node, excludeAddrPrefix)
+				if err != nil {
+					entry.WithError(err).Errorf("insert miner info: %d", node.ID)
+				}
+			}
+		}
+		_, err = collectionProgress.InsertOne(ctx, &TrackProgress{ID: 99999, Start: time.Now().Unix(), Timestamp: time.Now().Unix()})
+		if err != nil {
+			entry.WithError(err).Error("insert miner tracking progress")
+		}
+	}
+	go func() {
+		entry.Info("continuing tracking miners...")
+		for {
+			beginTime := time.Now().UnixNano()
+			record := new(TrackProgress)
+			err := collectionProgress.FindOne(ctx, bson.M{"_id": 99999}).Decode(record)
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					time.Now().Unix()
+					record = &TrackProgress{ID: 99999, Start: time.Now().Unix() - int64(nodeMgr.avaliableNodeTimeGap)*60, Timestamp: time.Now().Unix()}
+					_, err := collectionProgress.InsertOne(ctx, record)
+					if err != nil {
+						entry.WithError(err).Error("insert miner tracking progress")
+						time.Sleep(time.Duration(nodeMgr.retryTimeDelay) * time.Millisecond)
+						continue
+					}
+				} else {
+					entry.WithError(err).Error("finding miner tracking progress")
+					time.Sleep(time.Duration(nodeMgr.retryTimeDelay) * time.Millisecond)
+					continue
+				}
+			}
+			var start int32 = 0
+			for {
+				nodes, err := FetchMinersInfo(ctx, httpCli, minertrackerURL, start, record.Start, int64(nodeMgr.minerTrackBatchSize))
+				if err != nil {
+					entry.WithError(err).Errorf("fetch miners info: %s, from %d limit %d, timestamp %d", minertrackerURL, start, nodeMgr.minerTrackBatchSize, record.Start)
+					time.Sleep(time.Duration(nodeMgr.retryTimeDelay) * time.Millisecond)
+					continue
+				}
+				if len(nodes) == 0 {
+					break
+				}
+				start = nodes[len(nodes)-1].ID
+				for _, node := range nodes {
+					err = nodeMgr.syncNode(ctx, node, excludeAddrPrefix)
+					if err != nil {
+						entry.WithError(err).Errorf("insert miner info: %d", node.ID)
+					}
+				}
+			}
+			collectionProgress.UpdateOne(ctx, bson.M{"_id": 99999}, bson.M{"$set": bson.M{"start": time.Now().Unix(), "timestamp": time.Now().Unix()}})
+			sleepTime := time.Now().UnixNano() - beginTime
+			if int64(nodeMgr.minerTrackInterval)*60*1000000000-sleepTime > 0 {
+				time.Sleep(time.Duration(int64(nodeMgr.minerTrackInterval)*60*1000000000-sleepTime) * time.Nanosecond)
+			}
+		}
+	}()
+	return nil
+}
+
+func FetchMinersInfo(ctx context.Context, httpCli *http.Client, minertrackerURL string, from int32, timestamp, limit int64) ([]*Node, error) {
+	entry := log.WithFields(log.Fields{Function: "fetchMinersInfo"})
+	body := bytes.NewBuffer([]byte(fmt.Sprintf("{\"_id\":{\"$gt\":%d},\"timestamp\":{\"$gt\":%d}}", from, timestamp)))
+	request, err := http.NewRequest("POST", fmt.Sprintf("%s/query?sort=_id&asc=true&limit=%d", minertrackerURL, limit), body)
+	if err != nil {
+		entry.WithError(err).Errorf("create request failed: %s, from %d limit %d, timestamp %d", minertrackerURL, from, limit, timestamp)
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Add("Accept-Encoding", "gzip")
+	resp, err := httpCli.Do(request)
+	if err != nil {
+		entry.WithError(err).Errorf("get miner logs failed: %s, from %d limit %d, timestamp %d", minertrackerURL, from, limit, timestamp)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	reader := io.Reader(resp.Body)
+	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
+		gbuf, err := gzip.NewReader(reader)
+		if err != nil {
+			entry.WithError(err).Errorf("decompress response body: %s, from %d limit %d, timestamp %d", minertrackerURL, from, limit, timestamp)
+			return nil, err
+		}
+		reader = io.Reader(gbuf)
+		defer gbuf.Close()
+	}
+	response := make([]*Node, 0)
+	err = json.NewDecoder(reader).Decode(&response)
+	if err != nil {
+		entry.WithError(err).Errorf("decode miners failed: %s, from %d limit %d, timestamp %d", minertrackerURL, from, limit, timestamp)
+		return nil, err
+	}
+	entry.Debugf("fetched %d miners", len(response))
+	return response, nil
 }
 
 //GetSpotCheckTask get spotcgeck task
@@ -370,16 +512,16 @@ func (nodeMgr *NodeManager) syncNode(ctx context.Context, node *Node, excludeAdd
 	node.Addrs = checkPublicAddrs(node.Addrs, excludeAddrPrefix)
 	collection := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
 	collectionSN := nodeMgr.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
-	otherDoc := bson.A{}
-	if node.Ext != "" && node.Ext[0] == '[' && node.Ext[len(node.Ext)-1] == ']' {
-		var bdoc interface{}
-		err := bson.UnmarshalExtJSON([]byte(node.Ext), true, &bdoc)
-		if err != nil {
-			entry.WithError(err).Warn("parse ext document")
-		} else {
-			otherDoc, _ = bdoc.(bson.A)
-		}
-	}
+	// otherDoc := bson.A{}
+	// if node.Ext != "" && node.Ext[0] == '[' && node.Ext[len(node.Ext)-1] == ']' {
+	// 	var bdoc interface{}
+	// 	err := bson.UnmarshalExtJSON([]byte(node.Ext), true, &bdoc)
+	// 	if err != nil {
+	// 		entry.WithError(err).Warn("parse ext document")
+	// 	} else {
+	// 		otherDoc, _ = bdoc.(bson.A)
+	// 	}
+	// }
 	if node.Uspaces == nil {
 		node.Uspaces = make(map[string]int64)
 	}
@@ -390,7 +532,7 @@ func (nodeMgr *NodeManager) syncNode(ctx context.Context, node *Node, excludeAdd
 	// 		entry.WithError(err).Warnf("inserting node %d to Node table", node.ID)
 	// 		return err
 	// 	}
-	cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx, "other": otherDoc}
+	cond := bson.M{"nodeid": node.NodeID, "pubkey": node.PubKey, "owner": node.Owner, "profitAcc": node.ProfitAcc, "poolID": node.PoolID, "poolOwner": node.PoolOwner, "quota": node.Quota, "addrs": node.Addrs, "cpu": node.CPU, "memory": node.Memory, "bandwidth": node.Bandwidth, "maxDataSpace": node.MaxDataSpace, "assignedSpace": node.AssignedSpace, "productiveSpace": node.ProductiveSpace, "usedSpace": node.UsedSpace, "weight": node.Weight, "valid": node.Valid, "relay": node.Relay, "status": node.Status, "timestamp": node.Timestamp, "version": node.Version, "rebuilding": node.Rebuilding, "realSpace": node.RealSpace, "tx": node.Tx, "rx": node.Rx}
 	for k, v := range node.Uspaces {
 		cond[fmt.Sprintf("uspaces.%s", k)] = v
 	}
@@ -459,7 +601,7 @@ func checkPublicAddrs(addrs []string, excludeAddrPrefix string) []string {
 }
 
 func dedup(urls []string) []string {
-	if urls == nil || len(urls) == 0 {
+	if len(urls) == 0 {
 		return nil
 	}
 	sort.Strings(urls)

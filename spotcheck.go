@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -11,13 +12,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/elastic/go-elasticsearch/v7"
+	esapi "github.com/elastic/go-elasticsearch/v7/esapi"
 	proto "github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
 	pbh "github.com/yottachain/P2PHost/pb"
 	pb "github.com/yottachain/yotta-analysis/pbanalysis"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -52,40 +54,41 @@ func (analyser *Analyser) StartRecheck(ctx context.Context) {
 	}()
 }
 
-func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
-	entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
-	collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
-	errTime := time.Now().Unix() - int64(analyser.Params.PoolErrorMinerTimeThreshold) //int64(spotcheckInterval)*60 - int64(punishPhase1)*punishGapUnit
-	pipeline := mongo.Pipeline{
-		{{"$match", bson.D{{"poolOwner", poolOwner}, {"status", bson.D{{"$lt", 3}}}}}},
-		{{"$project", bson.D{{"poolOwner", 1}, {"err", bson.D{{"$cond", bson.D{{"if", bson.D{{"$or", bson.A{bson.D{{"$eq", bson.A{"$status", 2}}}, bson.D{{"$lt", bson.A{"$timestamp", errTime}}}}}}}, {"then", 1}, {"else", 0}}}}}}}},
-		{{"$group", bson.D{{"_id", "$poolOwner"}, {"poolTotalCount", bson.D{{"$sum", 1}}}, {"poolErrorCount", bson.D{{"$sum", "$err"}}}}}},
-	}
-	cur, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		entry.WithError(err).Warnf("aggregating miner count of pool owner %s", poolOwner)
-		return false
-	}
-	defer cur.Close(ctx)
-	pw := new(PoolWeight)
-	if cur.Next(ctx) {
-		err := cur.Decode(pw)
-		if err != nil {
-			entry.WithError(err).Warnf("decoding miner count of pool owner %s", poolOwner)
-			return false
-		}
-	}
-	threshold := float64(analyser.Params.ErrorNodePercentThreshold) / 100
-	if pw.PoolTotalCount == 0 {
-		return false
-	}
-	value := float64(pw.PoolTotalCount-pw.PoolErrorCount) / float64(pw.PoolTotalCount)
-	entry.Debugf("avaliable miner percent is %f%%, current threshold is %d%%", value*100, analyser.Params.ErrorNodePercentThreshold)
-	if value < threshold {
-		return true
-	}
-	return false
-}
+// func (analyser *Analyser) ifNeedPunish(ctx context.Context, minerID int32, poolOwner string) bool {
+	// return true
+	// entry := log.WithFields(log.Fields{Function: "ifNeedPunish", MinerID: minerID, PoolOwner: poolOwner})
+	// collection := analyser.analysisdbClient.Database(AnalysisDB).Collection(NodeTab)
+	// errTime := time.Now().Unix() - int64(analyser.Params.PoolErrorMinerTimeThreshold) //int64(spotcheckInterval)*60 - int64(punishPhase1)*punishGapUnit
+	// pipeline := mongo.Pipeline{
+	// 	{{"$match", bson.D{{"poolOwner", poolOwner}, {"status", bson.D{{"$lt", 3}}}}}},
+	// 	{{"$project", bson.D{{"poolOwner", 1}, {"err", bson.D{{"$cond", bson.D{{"if", bson.D{{"$or", bson.A{bson.D{{"$eq", bson.A{"$status", 2}}}, bson.D{{"$lt", bson.A{"$timestamp", errTime}}}}}}}, {"then", 1}, {"else", 0}}}}}}}},
+	// 	{{"$group", bson.D{{"_id", "$poolOwner"}, {"poolTotalCount", bson.D{{"$sum", 1}}}, {"poolErrorCount", bson.D{{"$sum", "$err"}}}}}},
+	// }
+	// cur, err := collection.Aggregate(ctx, pipeline)
+	// if err != nil {
+	// 	entry.WithError(err).Warnf("aggregating miner count of pool owner %s", poolOwner)
+	// 	return false
+	// }
+	// defer cur.Close(ctx)
+	// pw := new(PoolWeight)
+	// if cur.Next(ctx) {
+	// 	err := cur.Decode(pw)
+	// 	if err != nil {
+	// 		entry.WithError(err).Warnf("decoding miner count of pool owner %s", poolOwner)
+	// 		return false
+	// 	}
+	// }
+	// threshold := float64(analyser.Params.ErrorNodePercentThreshold) / 100
+	// if pw.PoolTotalCount == 0 {
+	// 	return false
+	// }
+	// value := float64(pw.PoolTotalCount-pw.PoolErrorCount) / float64(pw.PoolTotalCount)
+	// entry.Debugf("avaliable miner percent is %f%%, current threshold is %d%%", value*100, analyser.Params.ErrorNodePercentThreshold)
+	// if value < threshold {
+	// 	return true
+	// }
+	// return false
+	// }
 
 func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *SpotCheckRecord) {
 	entry := log.WithFields(log.Fields{Function: "checkDataNode", TaskID: spr.TaskID, MinerID: spr.NID, ShardHash: spr.VNI})
@@ -96,7 +99,7 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 	opts := new(options.FindOneAndUpdateOptions)
 	opts = opts.SetReturnDocument(options.After)
 	entry.Debug("checking shard")
-	_, err := analyser.CheckVNI(ctx, node, spr)
+	b, err := analyser.CheckVNI(ctx, node, spr)
 	if err != nil {
 		entry.WithError(err).Warn("checking shard")
 		err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
@@ -113,20 +116,20 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 			return
 		}
 		errCount := scNode.ErrorCount
-		if errCount > analyser.Params.PunishPhase3 {
-			_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
-			if err != nil {
-				entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
-			}
-			errCount = analyser.Params.PunishPhase3
-		}
-		if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-			if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
-				analyser.punish(ctx, 0, node.ID, errCount, true)
-			} else {
-				analyser.punish(ctx, 0, node.ID, errCount, false)
-			}
-		}
+		// if errCount > analyser.Params.PunishPhase3 {
+		// 	_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+		// 	if err != nil {
+		// 		entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+		// 	}
+		// 	errCount = analyser.Params.PunishPhase3
+		// }
+		// if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+		// 	if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+		// 		analyser.punish(ctx, 0, node.ID, errCount, true)
+		// 	} else {
+		// 		analyser.punish(ctx, 0, node.ID, errCount, false)
+		// 	}
+		// }
 		entry.Debugf("increasing error count of miner: %d", errCount)
 		defer func() {
 			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
@@ -137,93 +140,102 @@ func (analyser *Analyser) checkDataNode(ctx context.Context, node *Node, spr *Sp
 			}
 		}()
 	} else {
-		//if b {
-		_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-		if err != nil {
-			entry.WithError(err).Error("updating task status to 0")
-		} else {
-			entry.Info("rechecking shard successful")
+		if b {
+			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+			if err != nil {
+				entry.WithError(err).Error("updating task status to 0")
+			} else {
+				entry.Info("rechecking shard successful")
+			}
+			analyser.punish(ctx, int32(0), node.ID, int32(0), false)
+			return
 		}
-		analyser.punish(ctx, int32(0), node.ID, int32(0), false)
-		return
-		//}
-		// entry.Info("rechecking shard failed, checking 100 more shards")
-		// i := 0
-		// var errCount int64 = 0
-		// flag := true
-		// for j := 0; i < 100; j++ {
-		// 	i++
-		// 	spr.VNI = spr.ExtraShards[j]
-		// 	entry.Debugf("generated random shard %d: %s", i, spr.VNI)
-		// 	b, err := analyser.CheckVNI(ctx, node, spr)
-		// 	if err != nil {
-		// 		flag = false
-		// 		entry.WithError(err).Debugf("checking shard %d: %s", i, spr.VNI)
-		// 		err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
-		// 		if err != nil {
-		// 			entry.WithError(err).Error("increasing error count of miner")
-		// 			defer func() {
-		// 				_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
-		// 				if err != nil {
-		// 					entry.WithError(err).Error("updating task status to 0")
-		// 				} else {
-		// 					entry.Debug("task status is updated to 0")
-		// 				}
-		// 			}()
-		// 			return
-		// 		}
-		// 		errCount2 := scNode.ErrorCount
-		// 		if errCount2 > analyser.Params.PunishPhase3 {
-		// 			_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
-		// 			if err != nil {
-		// 				entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
-		// 			}
-		// 			errCount2 = analyser.Params.PunishPhase3
-		// 		}
-		// 		if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
-		// 			if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
-		// 				analyser.punish(ctx, 0, node.ID, errCount2, true)
-		// 			} else {
-		// 				analyser.punish(ctx, 0, node.ID, errCount2, false)
-		// 			}
-		// 		}
-		// 		entry.Debugf("increasing error count of miner: %d", errCount2)
-		// 		break
-		// 	}
-		// 	if !b {
-		// 		errCount++
-		// 		entry.Debugf("checking shard %d successful: %s", i, spr.VNI)
-		// 	} else {
-		// 		entry.Debugf("checking shard %d failed: %s", i, spr.VNI)
-		// 	}
-		// }
-		// defer func() {
-		// 	_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
-		// 	if err != nil {
-		// 		entry.WithError(err).Error("updating task status to 2")
-		// 	} else {
-		// 		entry.Debug("task status is updated to 2")
-		// 	}
-		// }()
-		// if flag {
-		// 	entry.Infof("finished 100 shards check, %d shards errors in %d checks", errCount, i)
-		// 	if errCount == 100 {
-		// 		entry.Warnf("100/100 random shards checking failed, punish %d%% deposit", analyser.Params.PunishPhase3Percent)
-		// 		if analyser.Params.PunishPhase3Percent > 0 {
-		// 			if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
-		// 				analyser.punish(ctx, 2, node.ID, analyser.Params.PunishPhase3Percent, true)
-		// 			}
-		// 		}
-		// 	} else {
-		// 		entry.Warnf("%d/100 random shards checking failed, punish %d%% deposit", errCount, analyser.Params.PunishPhase1Percent)
-		// 		if analyser.Params.PunishPhase1Percent > 0 {
-		// 			if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
-		// 				analyser.punish(ctx, 1, node.ID, analyser.Params.PunishPhase1Percent, true)
-		// 			}
-		// 		}
-		// 	}
-		// 	return
-		// }
+		entry.Info("rechecking shard failed, checking 1000 more shards")
+		i := 0
+		var errCount int64 = 0
+		flag := true
+		result := make([]*SPResult, 0)
+		for j := 0; i < 1000; j++ {
+			i++
+			spr.VNI = spr.ExtraShards[j]
+			entry.Debugf("generated random shard %d: %s", i, spr.VNI)
+			b, err := analyser.CheckVNI(ctx, node, spr)
+			if err != nil {
+				flag = false
+				entry.WithError(err).Debugf("checking shard %d: %s", i, spr.VNI)
+				err = collectionSN.FindOneAndUpdate(ctx, bson.M{"_id": spr.NID}, bson.M{"$inc": bson.M{"errorCount": 1}}, opts).Decode(scNode)
+				if err != nil {
+					entry.WithError(err).Error("increasing error count of miner")
+					defer func() {
+						_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 0}})
+						if err != nil {
+							entry.WithError(err).Error("updating task status to 0")
+						} else {
+							entry.Debug("task status is updated to 0")
+						}
+					}()
+					return
+				}
+				errCount2 := scNode.ErrorCount
+				// if errCount2 > analyser.Params.PunishPhase3 {
+				// 	_, err := collectionSN.UpdateOne(ctx, bson.M{"_id": spr.NID}, bson.M{"$set": bson.M{"errorCount": analyser.Params.PunishPhase3}})
+				// 	if err != nil {
+				// 		entry.WithError(err).Errorf("updating error count to punish phase 3: %d", analyser.Params.PunishPhase3)
+				// 	}
+				// 	errCount2 = analyser.Params.PunishPhase3
+				// }
+				// if analyser.Params.PunishPhase1Percent != 0 && analyser.Params.PunishPhase2Percent != 0 && analyser.Params.PunishPhase3Percent != 0 {
+				// 	if analyser.ifNeedPunish(ctx, node.ID, node.PoolOwner) {
+				// 		analyser.punish(ctx, 0, node.ID, errCount2, true)
+				// 	} else {
+				// 		analyser.punish(ctx, 0, node.ID, errCount2, false)
+				// 	}
+				// }
+				entry.Debugf("increasing error count of miner: %d", errCount2)
+				break
+			}
+			vhfb, _ := base64.StdEncoding.DecodeString(spr.ExtraShards[j])
+			vhf := base64.StdEncoding.EncodeToString(vhfb[11:])
+			if !b {
+				result = append(result, &SPResult{Hash: vhf, Pass: false})
+				errCount++
+				entry.Debugf("checking shard %d successful: %s", i, spr.VNI)
+			} else {
+				result = append(result, &SPResult{Hash: vhf, Pass: true})
+				entry.Debugf("checking shard %d failed: %s", i, spr.VNI)
+			}
+		}
+		defer func() {
+			_, err := collectionS.UpdateOne(ctx, bson.M{"_id": spr.TaskID}, bson.M{"$set": bson.M{"status": 2}})
+			if err != nil {
+				entry.WithError(err).Error("updating task status to 2")
+			} else {
+				entry.Debug("task status is updated to 2")
+			}
+		}()
+		err = AddResultToES(ctx, analyser.esClient, &SPLog{MinerID: node.ID, Result: result, Timestamp: time.Now().Format(time.RFC3339Nano)})
+		if err != nil {
+			entry.WithError(err).Error("insert log to elastcisearch")
+		}
+		if flag {
+			entry.Infof("finished 1000 shards check, %d shards errors in %d checks", errCount, i)
+			// if errCount == 1000 {
+			// 	entry.Warnf("1000/1000 random shards checking failed, punish %d%% deposit", analyser.Params.PunishPhase3Percent)
+			// 	if analyser.Params.PunishPhase3Percent > 0 {
+			// 		if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+			// 			analyser.punish(ctx, 2, node.ID, analyser.Params.PunishPhase3Percent, true)
+			// 		}
+			// 	}
+			// } else {
+			// 	entry.Warnf("%d/1000 random shards checking failed, punish %d%% deposit", errCount, analyser.Params.PunishPhase1Percent)
+			// 	if analyser.Params.PunishPhase1Percent > 0 {
+			// 		if analyser.ifNeedPunish(ctx, spr.NID, node.PoolOwner) {
+			// 			analyser.punish(ctx, 1, node.ID, analyser.Params.PunishPhase1Percent, true)
+			// 		}
+			// 	}
+			// }
+			return
+		}
 	}
 }
 
@@ -288,27 +300,27 @@ func (analyser *Analyser) CheckVNI(ctx context.Context, node *Node, spr *SpotChe
 }
 
 func (analyser *Analyser) punish(ctx context.Context, msgType, minerID, count int32, needPunish bool) {
-	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
-	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
-		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
-		return
-	}
-	entry.Infof("send PunishMessage of miner %d, message type %d, need punishment %v: %d", minerID, msgType, needPunish, count)
-	rule := make(map[int32]int32)
-	rule[analyser.Params.PunishPhase1] = analyser.Params.PunishPhase1Percent
-	rule[analyser.Params.PunishPhase2] = analyser.Params.PunishPhase2Percent
-	rule[analyser.Params.PunishPhase3] = analyser.Params.PunishPhase3Percent
-	msg := &pb.PunishMessage{NodeID: minerID, Type: msgType, Count: count, NeedPunish: needPunish, Rule: rule}
-	b, err := proto.Marshal(msg)
-	if err != nil {
-		entry.WithError(err).Error("marshaling PunishMessage failed")
-		return
-	}
-	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
-	ret := analyser.nodeMgr.MqClis[snID].Send(ctx, fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
-	if !ret {
-		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
-	}
+	// 	entry := log.WithFields(log.Fields{Function: "punish", MinerID: minerID})
+	// 	if analyser.Params.PunishPhase1Percent == 0 && analyser.Params.PunishPhase2Percent == 0 && analyser.Params.PunishPhase3Percent == 0 {
+	// 		entry.Infof("skip sending PunishMessage of miner %d, message type %d, need punishment %v to SN: %d", minerID, msgType, needPunish, count)
+	// 		return
+	// 	}
+	// 	entry.Infof("send PunishMessage of miner %d, message type %d, need punishment %v: %d", minerID, msgType, needPunish, count)
+	// 	rule := make(map[int32]int32)
+	// 	rule[analyser.Params.PunishPhase1] = analyser.Params.PunishPhase1Percent
+	// 	rule[analyser.Params.PunishPhase2] = analyser.Params.PunishPhase2Percent
+	// 	rule[analyser.Params.PunishPhase3] = analyser.Params.PunishPhase3Percent
+	// 	msg := &pb.PunishMessage{NodeID: minerID, Type: msgType, Count: count, NeedPunish: needPunish, Rule: rule}
+	// 	b, err := proto.Marshal(msg)
+	// 	if err != nil {
+	// 		entry.WithError(err).Error("marshaling PunishMessage failed")
+	// 		return
+	// 	}
+	// 	snID := int(minerID) % len(analyser.nodeMgr.MqClis)
+	// 	ret := analyser.nodeMgr.MqClis[snID].Send(ctx, fmt.Sprintf("sn%d", snID), append([]byte{byte(PunishMessage)}, b...))
+	// 	if !ret {
+	// 		entry.Warnf("sending PunishMessage of miner %d failed", minerID)
+	// 	}
 }
 
 //UpdateTaskStatus process error task of spotchecking
@@ -318,7 +330,7 @@ func (analyser *Analyser) UpdateTaskStatus(ctx context.Context, taskID string, i
 	randtag := r.Int31()
 	st := time.Now().UnixNano()
 	defer func() {
-		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+		entry.Tracef("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
@@ -430,7 +442,7 @@ func (analyser *Analyser) GetSpotCheckList(ctx context.Context) (*SpotCheckList,
 	randtag := r.Int31()
 	st := time.Now().UnixNano()
 	defer func() {
-		entry.Debugf("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
+		entry.Tracef("<time trace %d>cost time total: %dms", randtag, (time.Now().UnixNano()-st)/1000000)
 	}()
 	collectionS := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckTab)
 	//collectionSN := analyser.analysisdbClient.Database(AnalysisDB).Collection(SpotCheckNodeTab)
@@ -482,21 +494,48 @@ func (analyser *Analyser) IsNodeSelected() (bool, error) {
 		return false, nil
 	}
 	if float32(c)/float32(d) > 2 {
-		entry.Debug("c/d>2, set c=2000, d=1000")
+		entry.Trace("c/d>2, set c=2000, d=1000")
 		c = 2000
 		d = 1000
 	}
 	if d < 100 {
-		entry.Debug("d<100, set c=c*100 d=d*100")
+		entry.Trace("d<100, set c=c*100 d=d*100")
 		c = c * 100
 		d = d * 100
 	}
 	n := rand.Int63n(d * analyser.Params.SpotCheckInterval)
-	entry.Debugf("random number is %d", n)
+	entry.Tracef("random number is %d", n)
 	if n < c {
-		entry.Debug("miner selected")
+		entry.Trace("miner selected")
 		return true, nil
 	}
-	entry.Debug("miner unselected")
+	entry.Trace("miner unselected")
 	return false, nil
+}
+
+type SPLog struct {
+	MinerID   int32       `json:"minerid"`
+	Result    []*SPResult `json:"result"`
+	Timestamp string      `json:"timestamp"`
+}
+
+type SPResult struct {
+	Hash string `json:"hash"`
+	Pass bool   `json:"pass"`
+}
+
+func AddResultToES(ctx context.Context, esClient *elasticsearch.Client, splog *SPLog) error {
+	body, _ := json.Marshal(splog)
+	req := esapi.IndexRequest{
+		Index: "spotcheck",
+		//DocumentID: strconv.Itoa(i + 1),
+		Body:    strings.NewReader(string(body)),
+		Refresh: "true",
+	}
+	res, err := req.Do(ctx, esClient)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
 }

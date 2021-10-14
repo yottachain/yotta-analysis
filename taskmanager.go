@@ -126,9 +126,9 @@ func (taskMgr *TaskManager) GetSpotCheckItem(ctx context.Context, node *Node) (*
 	extraShards := make([]string, 0)
 	var innerErr *error
 	var wg sync.WaitGroup
-	wg.Add(100)
+	wg.Add(1000)
 	var lock sync.Mutex
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		go func() {
 			defer wg.Done()
 			s, err := taskMgr.randomVNI(ctx, node)

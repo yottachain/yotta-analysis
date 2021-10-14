@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 		// }
 		initLog(config)
 		ctx := context.Background()
-		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.AuraMQ, config.MinerStat, config.MiscConfig)
+		analyser, err := ytanalysis.New(ctx, config.AnalysisDBURL, config.PDURLs, config.ESURLs, config.ESUserName, config.ESPassword, config.MinerTrackerURL, config.MinerStat, config.MiscConfig)
 		if err != nil {
 			panic(fmt.Sprintf("fatal error when starting analyser: %s\n", err))
 		}
@@ -155,25 +155,33 @@ var (
 	DefaultAnalysisDBURL string = "mongodb://127.0.0.1:27017/?connect=direct"
 	//DefaultPDURLs default value of PDURLs
 	DefaultPDURLs []string = []string{"127.0.0.1:2379"}
+	//DefaultESURLs default value of ESURLs
+	DefaultESURLs []string = []string{"http://127.0.0.1:9200"}
+	//DefaultESUserName default value of ESUserName
+	DefaultESUserName string = ""
+	//DefaultESPassword default value of ESPassword
+	DefaultESPassword string = ""
+	//DefaultMinerTrackerURL default value of MinerTrackerURL
+	DefaultMinerTrackerURL string = "https://dnrpc.yottachain.net/query"
 
-	//DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
-	DefaultAuramqSubscriberBufferSize = 1024
-	//DefaultAuramqPingWait default value of AuramqPingWait
-	DefaultAuramqPingWait = 30
-	//DefaultAuramqReadWait default value of AuramqReadWait
-	DefaultAuramqReadWait = 60
-	//DefaultAuramqWriteWait default value of AuramqWriteWait
-	DefaultAuramqWriteWait = 10
-	//DefaultAuramqMinerSyncTopic default value of AuramqMinerSyncTopic
-	DefaultAuramqMinerSyncTopic = "sync"
-	//DefaultAuramqAllSNURLs default value of AuramqAllSNURLs
-	DefaultAuramqAllSNURLs = []string{}
-	//DefaultAuramqAccount default value of AuramqAccount
-	DefaultAuramqAccount = ""
-	//DefaultAuramqPrivateKey default value of AuramqPrivateKey
-	DefaultAuramqPrivateKey = ""
-	//DefaultAuramqClientID default value of AuramqClientID
-	DefaultAuramqClientID = "yottaanalysis"
+	// //DefaultAuramqSubscriberBufferSize default value of AuramqSubscriberBufferSize
+	// DefaultAuramqSubscriberBufferSize = 1024
+	// //DefaultAuramqPingWait default value of AuramqPingWait
+	// DefaultAuramqPingWait = 30
+	// //DefaultAuramqReadWait default value of AuramqReadWait
+	// DefaultAuramqReadWait = 60
+	// //DefaultAuramqWriteWait default value of AuramqWriteWait
+	// DefaultAuramqWriteWait = 10
+	// //DefaultAuramqMinerSyncTopic default value of AuramqMinerSyncTopic
+	// DefaultAuramqMinerSyncTopic = "sync"
+	// //DefaultAuramqAllSNURLs default value of AuramqAllSNURLs
+	// DefaultAuramqAllSNURLs = []string{}
+	// //DefaultAuramqAccount default value of AuramqAccount
+	// DefaultAuramqAccount = ""
+	// //DefaultAuramqPrivateKey default value of AuramqPrivateKey
+	// DefaultAuramqPrivateKey = ""
+	// //DefaultAuramqClientID default value of AuramqClientID
+	// DefaultAuramqClientID = "yottaanalysis"
 
 	//DefaultMinerStatAllSyncURLs default value of MinerStatAllSyncURLs
 	DefaultMinerStatAllSyncURLs = []string{}
@@ -224,11 +232,21 @@ var (
 	//DefaultMiscSpotCheckConnectTimeout default value of MiscSpotCheckConnectTimeout
 	DefaultMiscSpotCheckConnectTimeout int64 = 10
 	//DefaultMiscErrorNodePercentThreshold default value of MiscErrorNodePercentThreshold
-	DefaultMiscErrorNodePercentThreshold int32 = 95
+	//DefaultMiscErrorNodePercentThreshold int32 = 95
 	//DefaultMiscPoolErrorMinerTimeThreshold default value of MiscPoolErrorMinerTimeThreshold
-	DefaultMiscPoolErrorMinerTimeThreshold int32 = 14400
+	//DefaultMiscPoolErrorMinerTimeThreshold int32 = 14400
 	//DefaultMiscExcludeAddrPrefix default value of MiscExcludeAddrPrefix
 	DefaultMiscExcludeAddrPrefix string = ""
+	//DefaultMiscRetryTimeDealy default value of MiscRetryTimeDelay
+	DefaultMiscRetryTimeDealy int32 = 5000
+	//DefaultMiscMinerTrackBatchSize default value of MiscMinerTrackBatchSize
+	DefaultMiscMinerTrackBatchSize int32 = 2000
+	//DefaultMiscMinerTrackInterval default value of MiscMinerTrackInterval
+	DefaultMiscMinerTrackInterval int32 = 2
+	//DefaultMiscPrepareTaskPoolSize default value of MiscPrepareTaskPoolSize
+	DefaultMiscPrepareTaskPoolSize int32 = 1000
+	//DefaultMiscCalculateCDInterval default value of MiscCalculateCDInterval
+	DefaultMiscCalculateCDInterval int32 = 3
 )
 
 func initFlag() {
@@ -239,25 +257,33 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.AnalysisDBURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.AnalysisDBURLField))
 	rootCmd.PersistentFlags().StringSlice(ytanalysis.PDURLsField, DefaultPDURLs, "URLs of PD")
 	viper.BindPFlag(ytanalysis.PDURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.PDURLsField))
-	//AuraMQ config
-	rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
-	viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))
-	rootCmd.PersistentFlags().Int(ytanalysis.AuramqPingWaitField, DefaultAuramqPingWait, "ping interval of MQ client")
-	viper.BindPFlag(ytanalysis.AuramqPingWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPingWaitField))
-	rootCmd.PersistentFlags().Int(ytanalysis.AuramqReadWaitField, DefaultAuramqReadWait, "read wait of MQ client")
-	viper.BindPFlag(ytanalysis.AuramqReadWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqReadWaitField))
-	rootCmd.PersistentFlags().Int(ytanalysis.AuramqWriteWaitField, DefaultAuramqWriteWait, "write wait of MQ client")
-	viper.BindPFlag(ytanalysis.AuramqWriteWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqWriteWaitField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqMinerSyncTopicField, DefaultAuramqMinerSyncTopic, "miner sync topic name")
-	viper.BindPFlag(ytanalysis.AuramqMinerSyncTopicField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqMinerSyncTopicField))
-	rootCmd.PersistentFlags().StringSlice(ytanalysis.AuramqAllSNURLsField, DefaultAuramqAllSNURLs, "all URLs of MQ port, in the form of --auramq.all-sn-urls \"URL1,URL2,URL3\"")
-	viper.BindPFlag(ytanalysis.AuramqAllSNURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAllSNURLsField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "BP account for anthentication")
-	viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "")
-	viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
-	rootCmd.PersistentFlags().String(ytanalysis.AuramqClientIDField, DefaultAuramqClientID, "client ID for identifying MQ client")
-	viper.BindPFlag(ytanalysis.AuramqClientIDField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqClientIDField))
+	rootCmd.PersistentFlags().StringSlice(ytanalysis.ESURLsField, DefaultESURLs, "URLs of ES")
+	viper.BindPFlag(ytanalysis.ESURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESURLsField))
+	rootCmd.PersistentFlags().String(ytanalysis.ESUserNameField, DefaultESUserName, "username of elasticsearch")
+	viper.BindPFlag(ytanalysis.ESUserNameField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESUserNameField))
+	rootCmd.PersistentFlags().String(ytanalysis.ESPasswordField, DefaultESPassword, "password of elasticsearch")
+	viper.BindPFlag(ytanalysis.ESPasswordField, rootCmd.PersistentFlags().Lookup(ytanalysis.ESPasswordField))
+	rootCmd.PersistentFlags().String(ytanalysis.MinerTrackerURLField, DefaultMinerTrackerURL, "URL of miner tracker service")
+	viper.BindPFlag(ytanalysis.MinerTrackerURLField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerTrackerURLField))
+	// //AuraMQ config
+	// rootCmd.PersistentFlags().Int(ytanalysis.AuramqSubscriberBufferSizeField, DefaultAuramqSubscriberBufferSize, "subscriber buffer size")
+	// viper.BindPFlag(ytanalysis.AuramqSubscriberBufferSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqSubscriberBufferSizeField))
+	// rootCmd.PersistentFlags().Int(ytanalysis.AuramqPingWaitField, DefaultAuramqPingWait, "ping interval of MQ client")
+	// viper.BindPFlag(ytanalysis.AuramqPingWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPingWaitField))
+	// rootCmd.PersistentFlags().Int(ytanalysis.AuramqReadWaitField, DefaultAuramqReadWait, "read wait of MQ client")
+	// viper.BindPFlag(ytanalysis.AuramqReadWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqReadWaitField))
+	// rootCmd.PersistentFlags().Int(ytanalysis.AuramqWriteWaitField, DefaultAuramqWriteWait, "write wait of MQ client")
+	// viper.BindPFlag(ytanalysis.AuramqWriteWaitField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqWriteWaitField))
+	// rootCmd.PersistentFlags().String(ytanalysis.AuramqMinerSyncTopicField, DefaultAuramqMinerSyncTopic, "miner sync topic name")
+	// viper.BindPFlag(ytanalysis.AuramqMinerSyncTopicField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqMinerSyncTopicField))
+	// rootCmd.PersistentFlags().StringSlice(ytanalysis.AuramqAllSNURLsField, DefaultAuramqAllSNURLs, "all URLs of MQ port, in the form of --auramq.all-sn-urls \"URL1,URL2,URL3\"")
+	// viper.BindPFlag(ytanalysis.AuramqAllSNURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAllSNURLsField))
+	// rootCmd.PersistentFlags().String(ytanalysis.AuramqAccountField, DefaultAuramqAccount, "BP account for anthentication")
+	// viper.BindPFlag(ytanalysis.AuramqAccountField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqAccountField))
+	// rootCmd.PersistentFlags().String(ytanalysis.AuramqPrivateKeyField, DefaultAuramqPrivateKey, "")
+	// viper.BindPFlag(ytanalysis.AuramqPrivateKeyField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqPrivateKeyField))
+	// rootCmd.PersistentFlags().String(ytanalysis.AuramqClientIDField, DefaultAuramqClientID, "client ID for identifying MQ client")
+	// viper.BindPFlag(ytanalysis.AuramqClientIDField, rootCmd.PersistentFlags().Lookup(ytanalysis.AuramqClientIDField))
 	//MinerStat config
 	rootCmd.PersistentFlags().StringSlice(ytanalysis.MinerStatAllSyncURLsField, DefaultMinerStatAllSyncURLs, "all URLs of sync services, in the form of --miner-stat.all-sync-urls \"URL1,URL2,URL3\"")
 	viper.BindPFlag(ytanalysis.MinerStatAllSyncURLsField, rootCmd.PersistentFlags().Lookup(ytanalysis.MinerStatAllSyncURLsField))
@@ -287,18 +313,18 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.MiscAvaliableNodeTimeGapField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscAvaliableNodeTimeGapField))
 	rootCmd.PersistentFlags().Int32(ytanalysis.MiscMinerVersionThresholdField, DefaultMiscMinerVersionThreshold, "Miner is considered as valid whose version is not less than this value")
 	viper.BindPFlag(ytanalysis.MiscMinerVersionThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscMinerVersionThresholdField))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase1Field, DefaultMiscPunishPhase1, "When reaching this value in spotchecking, do 1st phase punishment to the miner")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase1Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase1Field))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase2Field, DefaultMiscPunishPhase2, "When reaching this value in spotchecking, do 2nd phase punishment to the miner")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase2Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase2Field))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase3Field, DefaultMiscPunishPhase3, "When reaching this value in spotchecking, do 3rd phase punishment to the miner")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase3Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase3Field))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase1PercentField, DefaultMiscPunishPhase1Percent, "Percentage of 1st phase desposit punishing")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase1PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase1PercentField))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase2PercentField, DefaultMiscPunishPhase2Percent, "Percentage of 2nd phase desposit punishing")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase2PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase2PercentField))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase3PercentField, DefaultMiscPunishPhase3Percent, "Percentage of 3rd phase desposit punishing")
-	viper.BindPFlag(ytanalysis.MiscPunishPhase3PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase3PercentField))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase1Field, DefaultMiscPunishPhase1, "When reaching this value in spotchecking, do 1st phase punishment to the miner")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase1Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase1Field))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase2Field, DefaultMiscPunishPhase2, "When reaching this value in spotchecking, do 2nd phase punishment to the miner")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase2Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase2Field))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase3Field, DefaultMiscPunishPhase3, "When reaching this value in spotchecking, do 3rd phase punishment to the miner")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase3Field, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase3Field))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase1PercentField, DefaultMiscPunishPhase1Percent, "Percentage of 1st phase desposit punishing")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase1PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase1PercentField))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase2PercentField, DefaultMiscPunishPhase2Percent, "Percentage of 2nd phase desposit punishing")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase2PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase2PercentField))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPunishPhase3PercentField, DefaultMiscPunishPhase3Percent, "Percentage of 3rd phase desposit punishing")
+	// viper.BindPFlag(ytanalysis.MiscPunishPhase3PercentField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPunishPhase3PercentField))
 	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckStartTimeField, DefaultMiscSpotCheckStartTime, "Shards uploaded before this timestamp wil not be spotchecked")
 	viper.BindPFlag(ytanalysis.MiscSpotCheckStartTimeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckStartTimeField))
 	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckEndTimeField, DefaultMiscSpotCheckEndTime, "Shards uploaded after this timestamp wil not be spotchecked")
@@ -307,10 +333,20 @@ func initFlag() {
 	viper.BindPFlag(ytanalysis.MiscSpotCheckIntervalField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckIntervalField))
 	rootCmd.PersistentFlags().Int64(ytanalysis.MiscSpotCheckConnectTimeoutField, DefaultMiscSpotCheckConnectTimeout, "Timeout of connecting to miner when spotchecking")
 	viper.BindPFlag(ytanalysis.MiscSpotCheckConnectTimeoutField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscSpotCheckConnectTimeoutField))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscErrorNodePercentThresholdField, DefaultMiscErrorNodePercentThreshold, "Percentage of valid miner in th pool, bigger then which punishment will be skipped")
-	viper.BindPFlag(ytanalysis.MiscErrorNodePercentThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscErrorNodePercentThresholdField))
-	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPoolErrorMinerTimeThresholdField, DefaultMiscPoolErrorMinerTimeThreshold, "Miner with down time greater than this value is considered as invalid miner during pool weight related calculation")
-	viper.BindPFlag(ytanalysis.MiscPoolErrorMinerTimeThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPoolErrorMinerTimeThresholdField))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscErrorNodePercentThresholdField, DefaultMiscErrorNodePercentThreshold, "Percentage of valid miner in th pool, bigger then which punishment will be skipped")
+	// viper.BindPFlag(ytanalysis.MiscErrorNodePercentThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscErrorNodePercentThresholdField))
+	// rootCmd.PersistentFlags().Int32(ytanalysis.MiscPoolErrorMinerTimeThresholdField, DefaultMiscPoolErrorMinerTimeThreshold, "Miner with down time greater than this value is considered as invalid miner during pool weight related calculation")
+	// viper.BindPFlag(ytanalysis.MiscPoolErrorMinerTimeThresholdField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPoolErrorMinerTimeThresholdField))
 	rootCmd.PersistentFlags().String(ytanalysis.MiscExcludeAddrPrefixField, DefaultMiscExcludeAddrPrefix, "Miners with this value as address prefix is considered as valid")
 	viper.BindPFlag(ytanalysis.MiscExcludeAddrPrefixField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscExcludeAddrPrefixField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscRetryTimeDelayField, DefaultMiscRetryTimeDealy, "delay time between retries")
+	viper.BindPFlag(ytanalysis.MiscRetryTimeDelayField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscRetryTimeDelayField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscMinerTrackBatchSizeField, DefaultMiscMinerTrackBatchSize, "batch size when fetching miners from minertracker service")
+	viper.BindPFlag(ytanalysis.MiscMinerTrackBatchSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscMinerTrackBatchSizeField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscMinerTrackIntervalField, DefaultMiscMinerTrackInterval, "interval time between fetching miners from minertracker service")
+	viper.BindPFlag(ytanalysis.MiscMinerTrackIntervalField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscMinerTrackIntervalField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscPrepareTaskPoolSizeField, DefaultMiscPrepareTaskPoolSize, "pool size of preparing tasks")
+	viper.BindPFlag(ytanalysis.MiscPrepareTaskPoolSizeField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscPrepareTaskPoolSizeField))
+	rootCmd.PersistentFlags().Int32(ytanalysis.MiscCalculateCDIntervalField, DefaultMiscCalculateCDInterval, "interval time between calculating c and d parameters")
+	viper.BindPFlag(ytanalysis.MiscCalculateCDIntervalField, rootCmd.PersistentFlags().Lookup(ytanalysis.MiscCalculateCDIntervalField))
 }
